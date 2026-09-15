@@ -79,6 +79,15 @@
 
   .noteband{background:#FFF6E5; border:1px solid #E8C77A; color:#5A4200; padding:10px 14px; border-radius:3px; font-size:13px; margin-bottom:18px;}
 
+  .toast{
+    position:fixed; top:70px; left:50%; transform:translateX(-50%);
+    background:#1E7A34; color:#fff; padding:12px 22px; border-radius:4px;
+    font-size:14px; font-weight:600; box-shadow:0 4px 14px rgba(0,0,0,0.25);
+    z-index:50; animation:toastIn 0.25s ease;
+  }
+  @keyframes toastIn{ from{opacity:0; transform:translate(-50%,-8px);} to{opacity:1; transform:translate(-50%,0);} }
+  @media (prefers-reduced-motion: reduce){ .toast{animation:none;} }
+
   .adminshell{display:flex; min-height:calc(100vh - 60px);}
   .adminnav{ background:var(--ink); color:#fff; width:180px; flex-shrink:0; padding:20px 0; }
   .adminnav button{
@@ -167,8 +176,16 @@ let state = {
   newItem:{ name:'', category:CATEGORIES[0], qty:0, unit:'stk', minStock:0 },
   newItemError:'',
   acctEmail:'', acctCurrentPassword:'', acctNewPassword:'', acctNewPasswordConfirm:'', acctRegenCode:false, acctMsg:'',
-  appUrlDraft:'', appUrlMsg:''
+  appUrlDraft:'', appUrlMsg:'',
+  toastMsg:null
 };
+let toastTimer = null;
+function showToast(msg){
+  state.toastMsg = msg;
+  render();
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>{ state.toastMsg = null; render(); }, 2500);
+}
 
 async function sha256Hex(str){
   const enc = new TextEncoder();
@@ -351,7 +368,8 @@ function addItem(){
   state.newItemError = '';
   state.items.push({id:uid(), name:n.name.trim(), category:n.category, qty:Math.max(0,Number(n.qty)||0), unit:n.unit, minStock:Math.max(0,Number(n.minStock)||0)});
   state.newItem = {name:'', category:CATEGORIES[0], qty:0, unit:'stk', minStock:0};
-  saveItems(); render();
+  saveItems();
+  showToast('Vare lagt til.');
 }
 function startEdit(item){ state.editingId = item.id; state.editDraft = {...item}; render(); }
 function cancelEdit(){ state.editingId = null; render(); }
@@ -700,6 +718,7 @@ function render(){
       <span class="word">BRAVIDA</span>
       <span class="sub">LAGER</span>
     </div>
+    ${state.toastMsg ? `<div class="toast">${esc(state.toastMsg)}</div>` : ''}
     ${body}
   `;
 
