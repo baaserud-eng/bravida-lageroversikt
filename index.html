@@ -96,6 +96,10 @@
     padding:12px 20px; font-size:14.5px; cursor:pointer; border-left:3px solid transparent;
   }
   .adminnav button.active{color:#fff; border-left-color:var(--accent); background:rgba(255,255,255,0.04);}
+  .navbadge{
+    display:inline-block; margin-left:6px; background:var(--danger); color:#fff;
+    font-size:11px; font-weight:700; padding:1px 7px; border-radius:10px; vertical-align:middle;
+  }
   .adminmain{flex:1; padding:26px; max-width:920px;}
   @media (max-width:720px){
     .adminshell{flex-direction:column;}
@@ -126,6 +130,12 @@
 
   .inlineedit{background:var(--paper); border:1px solid var(--line); padding:14px; margin-top:6px; border-radius:3px;}
   .confirmrow{display:flex; align-items:center; gap:10px; font-size:13.5px; flex-wrap:wrap;}
+
+  .notiflist{display:flex; flex-direction:column; border-top:1px solid var(--line);}
+  .notifrow{padding:13px 14px; border-bottom:1px solid var(--line); font-size:14px;}
+  .notifrow.unseen{background:var(--danger-bg);}
+  .notifmeta{font-size:12px; color:var(--muted); margin-top:3px;}
+  .unseenTag{color:var(--danger); font-weight:700;}
 
   @media print{
     .topbar, .adminnav, .noprint{display:none !important;}
@@ -162,6 +172,7 @@ let state = {
   loaded:false,
   items:[],
   logs:[],
+  notifications:[],
   settings:null, // null = kontorsjef-tilgang er ikke satt opp ennå
   adminUnlocked:false,
   setupEmail:'', setupPassword:'', setupPasswordConfirm:'', setupError:'',
@@ -188,6 +199,32 @@ function showToast(msg, type){
   render();
   clearTimeout(toastTimer);
   toastTimer = setTimeout(()=>{ state.toastMsg = null; render(); }, 2500);
+}
+
+/* ============ low-stock notifications ============ */
+let lowStockState = {}; // itemId -> was it low last time we checked (in-memory, per session)
+function checkLowStockNotifications(silent){
+  let changed = false;
+  state.items.forEach(item=>{
+    const low = isLow(item);
+    const wasLow = lowStockState[item.id] === true;
+    if(low && !wasLow && !silent){
+      state.notifications.unshift({
+        id: uid(), itemId: item.id, itemName: item.name,
+        qty: item.qty, minStock: item.minStock,
+        ts: new Date().toISOString(), seen: false
+      });
+      state.notifications = state.notifications.slice(0, 200);
+      changed = true;
+    }
+    lowStockState[item.id] = low;
+  });
+  if(changed){ storageSet('notifications', state.notifications, true); }
+}
+async function markNotificationsSeen(){
+  let changed = false;
+  state.notifications.forEach(n=>{ if(!n.seen){ n.seen = true; changed = true; } });
+  if(changed){ await storageSet('notifications', state.notifications, true); }
 }
 
 async function sha256Hex(str){
@@ -224,9 +261,12 @@ async function init(){
   if(!items){ items = seedItems(); await storageSet('items', items, true); }
   let logs = await storageGet('logs', true);
   if(!logs){ logs = []; await storageSet('logs', logs, true); }
+  let notifications = await storageGet('notifications', true);
+  if(!notifications){ notifications = []; }
   let settings = await storageGet('settings', true); // null = ikke satt opp ennå
 
-  state.items = items; state.logs = logs; state.settings = settings; state.loaded = true;
+  state.items = items; state.logs = logs; state.notifications = notifications; state.settings = settings; state.loaded = true;
+  checkLowStockNotifications(true); // baseline stille - ikke varsle om ting som allerede var lavt før noen åpnet siden
   render();
   startPolling();
 }
@@ -237,7 +277,7 @@ function startPolling(){
     if(!state.adminUnlocked) return;
     if(state.editingId) return; // ikke overskriv en pågående redigering
     const items = await storageGet('items', true);
-    if(items){ state.items = items; }
+    if(items){ state.items = items; checkLowStockNotifications(); }
     const logs = await storageGet('logs', true);
     if(logs){ state.logs = logs; }
     render();
@@ -371,6 +411,7 @@ function addItem(){
   state.newItemError = '';
   state.items.push({id:uid(), name:n.name.trim(), category:n.category, qty:Math.max(0,Number(n.qty)||0), unit:n.unit, minStock:Math.max(0,Number(n.minStock)||0)});
   state.newItem = {name:'', category:CATEGORIES[0], qty:0, unit:'stk', minStock:0};
+  checkLowStockNotifications();
   saveItems();
   showToast('Vare lagt til.');
 }
@@ -382,6 +423,7 @@ function saveEdit(){
     state.items[idx] = {...state.editDraft, qty:Math.max(0,Number(state.editDraft.qty)||0), minStock:Math.max(0,Number(state.editDraft.minStock)||0)};
   }
   state.editingId = null;
+  checkLowStockNotifications();
   saveItems(); render();
 }
 function deleteItem(id){
@@ -393,9 +435,13 @@ function deleteItem(id){
 async function resetDemoData(){
   state.items = seedItems();
   state.logs = [];
+  state.notifications = [];
+  lowStockState = {};
   state.confirmReset = false;
   await storageSet('items', state.items, true);
   await storageSet('logs', state.logs, true);
+  await storageSet('notifications', state.notifications, true);
+  checkLowStockNotifications(true);
   render();
 }
 
@@ -479,9 +525,23 @@ function renderRecoveryCodeDisplay(){
 
 /* ============ render: dashboard ============ */
 function renderAdminNav(){
-  const tabs = [['oversikt','Oversikt'],['nyvare','Legg til vare'],['qr','QR-koder'],['logg','Logg'],['innstillinger','Innstillinger']];
+  const unseenCount = state.notifications.filter(n=>!n.seen).length;
+  const tabs = [
+    ['oversikt','Oversikt'],
+    ['varslinger','Varslinger'],
+    ['nyvare','Legg til vare'],
+    ['qr','QR-koder'],
+    ['logg','Logg'],
+    ['innstillinger','Innstillinger']
+  ];
   return `<div class="adminnav noprint">
-    ${tabs.map(([k,l])=>`<button class="${state.adminTab===k?'active':''}" onclick="state.adminTab='${k}'; render();">${l}</button>`).join('')}
+    ${tabs.map(([k,l])=>{
+      const badge = (k==='varslinger' && unseenCount>0) ? `<span class="navbadge">${unseenCount}</span>` : '';
+      const onclick = (k==='varslinger')
+        ? `state.adminTab='varslinger'; markNotificationsSeen(); render();`
+        : `state.adminTab='${k}'; render();`;
+      return `<button class="${state.adminTab===k?'active':''}" onclick="${onclick}">${l}${badge}</button>`;
+    }).join('')}
   </div>`;
 }
 
@@ -690,9 +750,25 @@ function renderInnstillinger(){
   `;
 }
 
+function renderVarslinger(){
+  const sorted = [...state.notifications].sort((a,b)=> b.ts.localeCompare(a.ts));
+  const rows = sorted.map(n=>`
+    <div class="notifrow ${n.seen?'':'unseen'}">
+      <div class="notifmain"><strong>${esc(n.itemName)}</strong> er lav på lager - ${n.qty} igjen (grense: ${n.minStock})</div>
+      <div class="notifmeta">${fmtDate(n.ts)}${n.seen?'':' · <span class="unseenTag">Ny</span>'}</div>
+    </div>
+  `).join('');
+  return `
+    <h1>Varslinger</h1>
+    <p style="color:var(--muted); font-size:13px; margin-bottom:16px;">Du får et varsel her hver gang en vare når eller går under grensen du har satt for lav beholdning.</p>
+    <div class="notiflist">${rows || '<p style="color:var(--muted);">Ingen varslinger ennå.</p>'}</div>
+  `;
+}
+
 function renderDashboard(){
   let body;
   if(state.adminTab==='oversikt') body = renderOversikt();
+  else if(state.adminTab==='varslinger') body = renderVarslinger();
   else if(state.adminTab==='nyvare') body = renderNyVare();
   else if(state.adminTab==='qr') body = renderQr();
   else if(state.adminTab==='logg') body = renderLogg();
