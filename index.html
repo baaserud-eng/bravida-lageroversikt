@@ -174,6 +174,7 @@ let state = {
   confirmDeleteId:null,
   confirmReset:false,
   logSearch:'',
+  oversiktSearch:'',
   newItem:{ name:'', category:CATEGORIES[0], qty:0, unit:'stk', minStock:0 },
   newItemError:'',
   acctEmail:'', acctCurrentPassword:'', acctNewPassword:'', acctNewPasswordConfirm:'', acctRegenCode:false, acctMsg:'',
@@ -485,7 +486,12 @@ function renderAdminNav(){
 }
 
 function renderOversikt(){
-  const rows = state.items.map(item=>{
+  const q = (state.oversiktSearch || '').toLowerCase();
+  const visibleItems = state.items.filter(item =>
+    !q || item.name.toLowerCase().includes(q) || item.category.toLowerCase().includes(q)
+  );
+
+  const rows = visibleItems.map(item=>{
     if(state.editingId === item.id){
       const d = state.editDraft;
       return `<tr><td colspan="6">
@@ -538,9 +544,12 @@ function renderOversikt(){
 
   return `
     <h1>Lageroversikt</h1>
+    <input type="text" placeholder="Søk etter vare..." value="${esc(state.oversiktSearch||'')}" data-focus-id="oversiktSearch"
+      style="width:100%; max-width:320px; padding:9px 12px; border:1.5px solid var(--line); border-radius:3px; font-size:14px; margin-bottom:14px;"
+      oninput="state.oversiktSearch=this.value; render();" />
     <table>
       <thead><tr><th>Vare</th><th>Kategori</th><th>Antall</th><th>Min.</th><th></th><th></th></tr></thead>
-      <tbody>${rows || '<tr><td colspan="6" style="color:var(--muted); padding:20px;">Ingen varer registrert ennå.</td></tr>'}</tbody>
+      <tbody>${rows || `<tr><td colspan="6" style="color:var(--muted); padding:20px;">${state.items.length ? 'Ingen varer matcher søket.' : 'Ingen varer registrert ennå.'}</td></tr>`}</tbody>
     </table>
   `;
 }
