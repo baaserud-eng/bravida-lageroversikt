@@ -1,1 +1,720 @@
+<!doctype html>
+<html lang="nb">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Bravida Lager – Kontorsjef</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  :root{
+    --ink:#12192B;
+    --paper:#EDEFEE;
+    --card:#FFFFFF;
+    --accent:#F0A202;
+    --accent-ink:#4A3300;
+    --danger:#C1272D;
+    --danger-bg:#FBEAEA;
+    --line:#D4D7D2;
+    --muted:#5B6169;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'IBM Plex Sans',system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;
+    min-height:100vh;
+  }
+  h1,h2,h3,.display{
+    font-family:'Barlow Condensed',sans-serif;
+    font-weight:600;
+    letter-spacing:0.01em;
+    margin:0;
+  }
+  .num{font-family:'IBM Plex Mono',monospace; font-variant-numeric:tabular-nums;}
+  button{font-family:inherit;}
+  a{color:inherit;}
+  :focus-visible{outline:3px solid var(--accent); outline-offset:2px;}
+  @media (prefers-reduced-motion: reduce){ *{transition:none !important; animation:none !important;} }
 
+  #app{min-height:100vh; display:flex; flex-direction:column;}
+
+  .topbar{
+    background:var(--ink); color:#fff;
+    padding:14px 18px; display:flex; align-items:baseline; gap:8px;
+    position:sticky; top:0; z-index:20;
+  }
+  .topbar .mark{ width:10px; height:10px; background:var(--accent); display:inline-block; border-radius:1px; }
+  .topbar .word{font-family:'Barlow Condensed',sans-serif; font-size:22px; font-weight:700; letter-spacing:0.02em;}
+  .topbar .sub{font-size:12px; color:#B9BFCC; font-family:'IBM Plex Mono',monospace;}
+
+  .wrap{max-width:900px; margin:0 auto; padding:20px 16px 60px; width:100%; flex:1;}
+
+  .center-note{max-width:420px; margin:60px auto; text-align:center; color:var(--muted);}
+  .spinner{width:28px; height:28px; border:3px solid var(--line); border-top-color:var(--accent); border-radius:50%; margin:0 auto 14px; animation:spin 0.8s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  .gatecard{max-width:340px; margin:70px auto; background:var(--card); border:1.5px solid var(--line); padding:30px; text-align:center; border-radius:2px;}
+  .gatecard h2{font-size:24px; margin-bottom:6px;}
+  .gatecard p{color:var(--muted); font-size:14px; margin:0 0 18px;}
+  .pininput{
+    width:100%; padding:13px; font-size:20px; text-align:center; border:1.5px solid var(--line);
+    border-radius:3px; margin-bottom:12px; font-family:'IBM Plex Mono',monospace;
+  }
+  .nameinput{
+    width:100%; padding:12px 14px; border:1.5px solid var(--line); border-radius:3px; font-size:16px; margin-bottom:12px;
+  }
+  .errmsg{color:var(--danger); font-size:13px; margin-bottom:10px;}
+  .primarybtn{
+    width:100%; padding:15px; background:var(--accent); color:var(--accent-ink); border:none; border-radius:3px;
+    font-size:16px; font-weight:600; cursor:pointer;
+  }
+  .primarybtn:disabled{opacity:0.5; cursor:not-allowed;}
+  .secondarybtn{ padding:10px 16px; background:none; border:1.5px solid var(--line); border-radius:3px; cursor:pointer; font-size:14px; }
+  .dangerbtn{ padding:8px 14px; background:none; border:1.5px solid var(--danger); color:var(--danger); border-radius:3px; cursor:pointer; font-size:13px; }
+  .ghostbtn{background:none; border:none; color:var(--muted); text-decoration:underline; cursor:pointer; font-size:13px; padding:4px 0;}
+
+  .noteband{background:#FFF6E5; border:1px solid #E8C77A; color:#5A4200; padding:10px 14px; border-radius:3px; font-size:13px; margin-bottom:18px;}
+
+  .adminshell{display:flex; min-height:calc(100vh - 60px);}
+  .adminnav{ background:var(--ink); color:#fff; width:180px; flex-shrink:0; padding:20px 0; }
+  .adminnav button{
+    display:block; width:100%; text-align:left; background:none; border:none; color:#C9CDD6;
+    padding:12px 20px; font-size:14.5px; cursor:pointer; border-left:3px solid transparent;
+  }
+  .adminnav button.active{color:#fff; border-left-color:var(--accent); background:rgba(255,255,255,0.04);}
+  .adminmain{flex:1; padding:26px; max-width:920px;}
+  @media (max-width:720px){
+    .adminshell{flex-direction:column;}
+    .adminnav{width:100%; display:flex; overflow-x:auto; padding:0;}
+    .adminnav button{white-space:nowrap; border-left:none; border-bottom:3px solid transparent; padding:14px 16px;}
+    .adminnav button.active{border-left:none; border-bottom-color:var(--accent);}
+  }
+
+  table{width:100%; border-collapse:collapse; font-size:14px;}
+  th{text-align:left; font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:0.04em; font-weight:600; padding:8px 10px; border-bottom:1.5px solid var(--ink);}
+  td{padding:10px; border-bottom:1px solid var(--line); vertical-align:middle;}
+  tr.lowrow{background:var(--danger-bg);}
+  .rowbtns{display:flex; gap:6px;}
+  .smallbtn{padding:5px 10px; font-size:12.5px; border:1px solid var(--line); background:var(--card); border-radius:3px; cursor:pointer;}
+
+  .adminmain h1{font-size:26px; margin-bottom:18px;}
+  .formgrid{display:grid; grid-template-columns:1fr 1fr; gap:14px; max-width:480px;}
+  .formfield label{display:block; font-size:13px; color:var(--muted); margin-bottom:5px;}
+  .formfield input, .formfield select{width:100%; padding:10px 12px; border:1.5px solid var(--line); border-radius:3px; font-size:15px;}
+  .savebar{margin-top:18px;}
+
+  .qrgrid{display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:16px;}
+  .qrcard{background:var(--card); border:1.5px solid var(--line); padding:16px; text-align:center; border-radius:2px;}
+  .qrcard .name{font-weight:600; margin:10px 0 2px;}
+  .qrcard .cat{font-size:12px; color:var(--muted); margin-bottom:10px;}
+  .qrbox{display:flex; justify-content:center; align-items:center; min-height:150px;}
+  .qrplaceholder{width:150px; height:150px; border:1.5px dashed var(--line); border-radius:4px; display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:12px; padding:10px; text-align:center;}
+
+  .inlineedit{background:var(--paper); border:1px solid var(--line); padding:14px; margin-top:6px; border-radius:3px;}
+  .confirmrow{display:flex; align-items:center; gap:10px; font-size:13.5px; flex-wrap:wrap;}
+
+  @media print{
+    .topbar, .adminnav, .noprint{display:none !important;}
+    .adminmain{padding:0; max-width:none;}
+    body{background:#fff;}
+    .qrgrid{grid-template-columns:repeat(3,1fr);}
+    .qrcard{break-inside:avoid; border:1px dashed #999;}
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+/* ============ storage helpers ============ */
+async function storageGet(key, shared){
+  try{
+    const res = await window.storage.get(key, shared);
+    return res ? JSON.parse(res.value) : null;
+  }catch(e){ return null; }
+}
+async function storageSet(key, value, shared){
+  try{
+    const res = await window.storage.set(key, JSON.stringify(value), shared);
+    return !!res;
+  }catch(e){ console.error('storage.set failed', key, e); return false; }
+}
+
+/* ============ state ============ */
+const CATEGORIES = ['Elektro','VVS','Brannsikkerhet','Ventilasjon','Annet'];
+const UNITS = ['stk','meter','pakke','liter'];
+
+let state = {
+  loaded:false,
+  items:[],
+  logs:[],
+  settings:null, // null = kontorsjef-tilgang er ikke satt opp ennå
+  adminUnlocked:false,
+  setupEmail:'', setupPassword:'', setupPasswordConfirm:'', setupError:'',
+  loginEmail:'', loginPassword:'', loginError:'', loginFailCount:0, loginLockedUntil:0,
+  showRecovery:false, recoveryCode:'', recoveryNewPassword:'', recoveryNewPasswordConfirm:'', recoveryError:'',
+  justRecoveryCode:null,
+  adminTab:'oversikt',
+  editingId:null,
+  editDraft:{},
+  confirmDeleteId:null,
+  confirmReset:false,
+  logSearch:'',
+  newItem:{ name:'', category:CATEGORIES[0], qty:0, unit:'stk', minStock:0 },
+  newItemError:'',
+  acctEmail:'', acctCurrentPassword:'', acctNewPassword:'', acctNewPasswordConfirm:'', acctRegenCode:false, acctMsg:'',
+  appUrlDraft:'', appUrlMsg:''
+};
+
+async function sha256Hex(str){
+  const enc = new TextEncoder();
+  const buf = await crypto.subtle.digest('SHA-256', enc.encode(str));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+function randomCode(len){
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const arr = new Uint32Array(len);
+  crypto.getRandomValues(arr);
+  let out = '';
+  for(let i=0;i<len;i++){ out += chars[arr[i] % chars.length]; }
+  return out;
+}
+function normEmail(e){ return String(e||'').trim().toLowerCase(); }
+
+function uid(){
+  return (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : 'id-'+Date.now()+'-'+Math.random().toString(36).slice(2,9);
+}
+function seedItems(){
+  return [
+    {id:uid(), name:'Brannalarm', category:'Brannsikkerhet', qty:24, unit:'stk', minStock:5},
+    {id:uid(), name:'Røykvarsler', category:'Brannsikkerhet', qty:40, unit:'stk', minStock:10},
+    {id:uid(), name:'Sikring 16A', category:'Elektro', qty:150, unit:'stk', minStock:20},
+    {id:uid(), name:'Kabelrør 20mm', category:'Elektro', qty:80, unit:'meter', minStock:15},
+    {id:uid(), name:'PEX-rør 20mm', category:'VVS', qty:60, unit:'meter', minStock:10},
+    {id:uid(), name:'Termostat', category:'Ventilasjon', qty:18, unit:'stk', minStock:4}
+  ];
+}
+
+async function init(){
+  let items = await storageGet('items', true);
+  if(!items){ items = seedItems(); await storageSet('items', items, true); }
+  let logs = await storageGet('logs', true);
+  if(!logs){ logs = []; await storageSet('logs', logs, true); }
+  let settings = await storageGet('settings', true); // null = ikke satt opp ennå
+
+  state.items = items; state.logs = logs; state.settings = settings; state.loaded = true;
+  render();
+  startPolling();
+}
+
+function startPolling(){
+  setInterval(async ()=>{
+    if(document.visibilityState !== 'visible') return;
+    if(!state.adminUnlocked) return;
+    if(state.editingId) return; // ikke overskriv en pågående redigering
+    const items = await storageGet('items', true);
+    if(items){ state.items = items; }
+    const logs = await storageGet('logs', true);
+    if(logs){ state.logs = logs; }
+    render();
+  }, 15000);
+
+  setInterval(()=>{
+    if(!state.adminUnlocked && state.settings && state.loginLockedUntil && Date.now() < state.loginLockedUntil){
+      render();
+    }
+  }, 1000);
+}
+
+/* ============ credentials ============ */
+async function submitSetup(){
+  const email = normEmail(state.setupEmail);
+  if(!email.includes('@') || email.length < 5){ state.setupError = 'Skriv inn en gyldig e-post.'; render(); return; }
+  if(state.setupPassword.length < 6){ state.setupError = 'Passordet må være minst 6 tegn.'; render(); return; }
+  if(state.setupPassword !== state.setupPasswordConfirm){ state.setupError = 'Passordene er ikke like.'; render(); return; }
+
+  const salt = randomCode(16);
+  const passwordHash = await sha256Hex(salt + state.setupPassword);
+  const recoveryCode = randomCode(10);
+  const recoveryHash = await sha256Hex(salt + 'recovery:' + recoveryCode);
+
+  state.settings = { email, salt, passwordHash, recoveryHash, appUrl:'' };
+  await storageSet('settings', state.settings, true);
+
+  state.setupPassword=''; state.setupPasswordConfirm=''; state.setupError='';
+  state.justRecoveryCode = recoveryCode;
+  render();
+}
+
+async function submitLogin(){
+  const now = Date.now();
+  if(state.loginLockedUntil && now < state.loginLockedUntil){ render(); return; }
+  const s = state.settings;
+  const attemptHash = await sha256Hex(s.salt + state.loginPassword);
+  if(normEmail(state.loginEmail) === s.email && attemptHash === s.passwordHash){
+    state.adminUnlocked = true; state.loginError=''; state.loginPassword=''; state.loginFailCount=0; state.loginLockedUntil=0;
+  }else{
+    state.loginFailCount = (state.loginFailCount||0) + 1;
+    if(state.loginFailCount >= 5){
+      state.loginLockedUntil = Date.now() + 30000;
+      state.loginFailCount = 0;
+      state.loginError = 'For mange feilforsøk. Prøv igjen om litt.';
+    }else{
+      state.loginError = 'Feil e-post eller passord.';
+    }
+  }
+  render();
+}
+
+function openForgotPassword(){ state.showRecovery = true; state.recoveryError=''; render(); }
+function cancelForgotPassword(){ state.showRecovery = false; state.recoveryCode=''; state.recoveryNewPassword=''; state.recoveryNewPasswordConfirm=''; state.recoveryError=''; render(); }
+
+async function submitRecovery(){
+  const s = state.settings;
+  const attemptHash = await sha256Hex(s.salt + 'recovery:' + state.recoveryCode.trim().toUpperCase());
+  if(attemptHash !== s.recoveryHash){ state.recoveryError = 'Feil gjenopprettingskode.'; render(); return; }
+  if(state.recoveryNewPassword.length < 6){ state.recoveryError = 'Det nye passordet må være minst 6 tegn.'; render(); return; }
+  if(state.recoveryNewPassword !== state.recoveryNewPasswordConfirm){ state.recoveryError = 'Passordene er ikke like.'; render(); return; }
+
+  const newSalt = randomCode(16);
+  s.salt = newSalt;
+  s.passwordHash = await sha256Hex(newSalt + state.recoveryNewPassword);
+  const newRecoveryCode = randomCode(10);
+  s.recoveryHash = await sha256Hex(newSalt + 'recovery:' + newRecoveryCode);
+  await storageSet('settings', s, true);
+
+  state.showRecovery=false; state.recoveryCode=''; state.recoveryNewPassword=''; state.recoveryNewPasswordConfirm=''; state.recoveryError='';
+  state.justRecoveryCode = newRecoveryCode;
+  render();
+}
+
+function acknowledgeRecoveryCode(){
+  state.justRecoveryCode = null;
+  state.adminUnlocked = true;
+  render();
+}
+
+async function saveAccountSettings(){
+  const s = state.settings;
+  const currentHash = await sha256Hex(s.salt + state.acctCurrentPassword);
+  if(currentHash !== s.passwordHash){ state.acctMsg = 'Feil nåværende passord.'; render(); return; }
+
+  const newEmail = normEmail(state.acctEmail) || s.email;
+  if(!newEmail.includes('@')){ state.acctMsg = 'E-posten ser ikke gyldig ut.'; render(); return; }
+  s.email = newEmail;
+
+  if(state.acctNewPassword){
+    if(state.acctNewPassword.length < 6){ state.acctMsg = 'Nytt passord må være minst 6 tegn.'; render(); return; }
+    if(state.acctNewPassword !== state.acctNewPasswordConfirm){ state.acctMsg = 'De nye passordene er ikke like.'; render(); return; }
+    const newSalt = randomCode(16);
+    s.salt = newSalt;
+    s.passwordHash = await sha256Hex(newSalt + state.acctNewPassword);
+  }
+
+  let showNewCode = null;
+  if(state.acctRegenCode){
+    const code = randomCode(10);
+    s.recoveryHash = await sha256Hex(s.salt + 'recovery:' + code);
+    showNewCode = code;
+  }
+
+  await storageSet('settings', s, true);
+  state.acctCurrentPassword=''; state.acctNewPassword=''; state.acctNewPasswordConfirm=''; state.acctRegenCode=false;
+  state.acctEmail = s.email;
+
+  if(showNewCode){
+    state.acctMsg='';
+    state.justRecoveryCode = showNewCode;
+  }else{
+    state.acctMsg = 'Lagret.';
+  }
+  render();
+}
+
+async function saveAppUrl(){
+  state.settings.appUrl = state.appUrlDraft.trim();
+  await storageSet('settings', state.settings, true);
+  state.appUrlMsg = 'Lagret.';
+  render();
+}
+
+/* ============ items / log ============ */
+async function saveItems(){ await storageSet('items', state.items, true); }
+
+function addItem(){
+  const n = state.newItem;
+  if(!n.name.trim()){ state.newItemError = 'Du må skrive et varenavn.'; render(); return; }
+  state.newItemError = '';
+  state.items.push({id:uid(), name:n.name.trim(), category:n.category, qty:Math.max(0,Number(n.qty)||0), unit:n.unit, minStock:Math.max(0,Number(n.minStock)||0)});
+  state.newItem = {name:'', category:CATEGORIES[0], qty:0, unit:'stk', minStock:0};
+  saveItems(); render();
+}
+function startEdit(item){ state.editingId = item.id; state.editDraft = {...item}; render(); }
+function cancelEdit(){ state.editingId = null; render(); }
+function saveEdit(){
+  const idx = state.items.findIndex(i=>i.id===state.editingId);
+  if(idx>-1){
+    state.items[idx] = {...state.editDraft, qty:Math.max(0,Number(state.editDraft.qty)||0), minStock:Math.max(0,Number(state.editDraft.minStock)||0)};
+  }
+  state.editingId = null;
+  saveItems(); render();
+}
+function deleteItem(id){
+  state.items = state.items.filter(i=>i.id!==id);
+  state.confirmDeleteId = null;
+  saveItems(); render();
+}
+async function resetDemoData(){
+  state.items = seedItems();
+  state.logs = [];
+  state.confirmReset = false;
+  await storageSet('items', state.items, true);
+  await storageSet('logs', state.logs, true);
+  render();
+}
+
+/* ============ helpers ============ */
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtDate(iso){
+  try{ return new Date(iso).toLocaleString('nb-NO', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); }catch(e){ return iso; }
+}
+function isLow(item){ return item.qty <= item.minStock; }
+function shelfUrl(itemId){
+  const base = (state.settings && state.settings.appUrl) ? state.settings.appUrl.trim() : '';
+  return base ? (base + '#item=' + itemId) : '';
+}
+
+/* ============ render: gate screens ============ */
+function renderAdminSetup(){
+  return `<div class="wrap">
+    <div class="gatecard" style="max-width:380px;">
+      <h2>Sett opp kontorsjef-tilgang</h2>
+      <p>Dette er første gang siden åpnes. Velg en e-post (brukes kun som innloggingsnavn her - det sendes ingen e-poster) og et passord.</p>
+      ${state.setupError?`<div class="errmsg">${esc(state.setupError)}</div>`:''}
+      <input class="nameinput" type="email" placeholder="E-post" value="${esc(state.setupEmail)}"
+        data-focus-id="setupEmail" oninput="state.setupEmail=this.value;" />
+      <input class="nameinput" type="password" placeholder="Passord (minst 6 tegn)" value="${esc(state.setupPassword)}"
+        data-focus-id="setupPassword" oninput="state.setupPassword=this.value;" />
+      <input class="nameinput" type="password" placeholder="Bekreft passord" value="${esc(state.setupPasswordConfirm)}"
+        data-focus-id="setupPasswordConfirm" oninput="state.setupPasswordConfirm=this.value;" onkeydown="if(event.key==='Enter') submitSetup();" />
+      <button class="primarybtn" onclick="submitSetup()">Opprett tilgang</button>
+    </div>
+  </div>`;
+}
+
+function renderAdminLogin(){
+  const now = Date.now();
+  const locked = state.loginLockedUntil && now < state.loginLockedUntil;
+  const secsLeft = locked ? Math.ceil((state.loginLockedUntil - now)/1000) : 0;
+  return `<div class="wrap">
+    <div class="gatecard">
+      <h2>Bravida Lager</h2>
+      <p>Logg inn for å se lageroversikten.</p>
+      ${locked ? `<div class="errmsg">For mange feilforsøk. Prøv igjen om ${secsLeft} sekunder.</div>` : (state.loginError?`<div class="errmsg">${esc(state.loginError)}</div>`:'')}
+      <input class="nameinput" type="email" placeholder="E-post" value="${esc(state.loginEmail)}" ${locked?'disabled':''}
+        data-focus-id="loginEmail" oninput="state.loginEmail=this.value;" />
+      <input class="pininput" style="letter-spacing:normal; font-size:16px; text-align:left;" type="password" placeholder="Passord"
+        value="${esc(state.loginPassword)}" ${locked?'disabled':''}
+        data-focus-id="loginPassword" oninput="state.loginPassword=this.value;" onkeydown="if(event.key==='Enter') submitLogin();" />
+      <button class="primarybtn" ${locked?'disabled':''} onclick="submitLogin()">Logg inn</button>
+      <p style="margin-top:14px;"><a href="#" onclick="openForgotPassword(); return false;" style="font-size:13px; color:var(--muted);">Glemt passord?</a></p>
+    </div>
+  </div>`;
+}
+
+function renderRecoveryForm(){
+  return `<div class="wrap">
+    <div class="gatecard" style="max-width:380px;">
+      <h2>Glemt passord</h2>
+      <p>Skriv inn gjenopprettingskoden du fikk da tilgangen ble satt opp (eller sist byttet), og velg et nytt passord.</p>
+      ${state.recoveryError?`<div class="errmsg">${esc(state.recoveryError)}</div>`:''}
+      <input class="pininput" style="letter-spacing:2px; font-size:18px;" type="text" placeholder="GJENOPPRETTINGSKODE" value="${esc(state.recoveryCode)}"
+        data-focus-id="recoveryCode" oninput="state.recoveryCode=this.value;" />
+      <input class="nameinput" type="password" placeholder="Nytt passord (minst 6 tegn)" value="${esc(state.recoveryNewPassword)}"
+        data-focus-id="recoveryNewPassword" oninput="state.recoveryNewPassword=this.value;" />
+      <input class="nameinput" type="password" placeholder="Bekreft nytt passord" value="${esc(state.recoveryNewPasswordConfirm)}"
+        data-focus-id="recoveryNewPasswordConfirm" oninput="state.recoveryNewPasswordConfirm=this.value;" onkeydown="if(event.key==='Enter') submitRecovery();" />
+      <button class="primarybtn" onclick="submitRecovery()">Sett nytt passord</button>
+      <p style="margin-top:14px;"><button class="ghostbtn" onclick="cancelForgotPassword()">Avbryt</button></p>
+    </div>
+  </div>`;
+}
+
+function renderRecoveryCodeDisplay(){
+  return `<div class="wrap">
+    <div class="gatecard" style="max-width:420px;">
+      <h2>Lagre denne koden</h2>
+      <p>Dette er gjenopprettingskoden din. Den vises bare denne ene gangen - skriv den ned og oppbevar den trygt. Den lar deg sette nytt passord hvis du glemmer det.</p>
+      <div class="num" style="font-size:26px; letter-spacing:3px; background:var(--paper); border:1.5px solid var(--line); border-radius:3px; padding:16px; text-align:center; margin:16px 0;">${esc(state.justRecoveryCode)}</div>
+      <button class="primarybtn" onclick="acknowledgeRecoveryCode()">Jeg har lagret koden</button>
+    </div>
+  </div>`;
+}
+
+/* ============ render: dashboard ============ */
+function renderAdminNav(){
+  const tabs = [['oversikt','Oversikt'],['nyvare','Legg til vare'],['qr','QR-koder'],['logg','Logg'],['innstillinger','Innstillinger']];
+  return `<div class="adminnav noprint">
+    ${tabs.map(([k,l])=>`<button class="${state.adminTab===k?'active':''}" onclick="state.adminTab='${k}'; render();">${l}</button>`).join('')}
+  </div>`;
+}
+
+function renderOversikt(){
+  const rows = state.items.map(item=>{
+    if(state.editingId === item.id){
+      const d = state.editDraft;
+      return `<tr><td colspan="6">
+        <div class="inlineedit">
+          <div class="formgrid">
+            <div class="formfield"><label>Navn</label><input type="text" value="${esc(d.name)}" oninput="state.editDraft.name=this.value;" /></div>
+            <div class="formfield"><label>Kategori</label>
+              <select onchange="state.editDraft.category=this.value;">
+                ${CATEGORIES.map(c=>`<option value="${c}" ${d.category===c?'selected':''}>${c}</option>`).join('')}
+              </select>
+            </div>
+            <div class="formfield"><label>Antall</label><input type="number" value="${d.qty}" oninput="state.editDraft.qty=this.value;" /></div>
+            <div class="formfield"><label>Enhet</label>
+              <select onchange="state.editDraft.unit=this.value;">
+                ${UNITS.map(u=>`<option value="${u}" ${d.unit===u?'selected':''}>${u}</option>`).join('')}
+              </select>
+            </div>
+            <div class="formfield"><label>Min. beholdning (varsel)</label><input type="number" value="${d.minStock}" oninput="state.editDraft.minStock=this.value;" /></div>
+          </div>
+          <div class="savebar rowbtns">
+            <button class="smallbtn" onclick="saveEdit()">Lagre</button>
+            <button class="smallbtn" onclick="cancelEdit()">Avbryt</button>
+          </div>
+        </div>
+      </td></tr>`;
+    }
+    if(state.confirmDeleteId === item.id){
+      return `<tr class="${isLow(item)?'lowrow':''}">
+        <td colspan="6">
+          <div class="confirmrow">
+            Slette «${esc(item.name)}» permanent?
+            <button class="smallbtn" onclick="deleteItem('${item.id}')">Ja, slett</button>
+            <button class="smallbtn" onclick="state.confirmDeleteId=null; render();">Avbryt</button>
+          </div>
+        </td>
+      </tr>`;
+    }
+    return `<tr class="${isLow(item)?'lowrow':''}">
+      <td>${esc(item.name)}</td>
+      <td>${esc(item.category)}</td>
+      <td class="num">${item.qty} ${esc(item.unit)}</td>
+      <td class="num">${item.minStock}</td>
+      <td>${isLow(item)?'<span style="color:var(--danger); font-weight:600; font-size:12.5px;">LAV</span>':''}</td>
+      <td><div class="rowbtns">
+        <button class="smallbtn" onclick="startEdit(state.items.find(i=>i.id==='${item.id}'))">Rediger</button>
+        <button class="smallbtn" onclick="state.confirmDeleteId='${item.id}'; render();">Slett</button>
+      </div></td>
+    </tr>`;
+  }).join('');
+
+  return `
+    <h1>Lageroversikt</h1>
+    <table>
+      <thead><tr><th>Vare</th><th>Kategori</th><th>Antall</th><th>Min.</th><th></th><th></th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="6" style="color:var(--muted); padding:20px;">Ingen varer registrert ennå.</td></tr>'}</tbody>
+    </table>
+  `;
+}
+
+function renderNyVare(){
+  const n = state.newItem;
+  return `
+    <h1>Legg til vare</h1>
+    ${state.newItemError?`<div class="errmsg">${esc(state.newItemError)}</div>`:''}
+    <div class="formgrid">
+      <div class="formfield"><label>Navn</label><input type="text" value="${esc(n.name)}" oninput="state.newItem.name=this.value;" placeholder="F.eks. Brannalarm" /></div>
+      <div class="formfield"><label>Kategori</label>
+        <select onchange="state.newItem.category=this.value;">
+          ${CATEGORIES.map(c=>`<option value="${c}" ${n.category===c?'selected':''}>${c}</option>`).join('')}
+        </select>
+      </div>
+      <div class="formfield"><label>Antall på lager nå</label><input type="number" value="${n.qty}" oninput="state.newItem.qty=this.value;" /></div>
+      <div class="formfield"><label>Enhet</label>
+        <select onchange="state.newItem.unit=this.value;">
+          ${UNITS.map(u=>`<option value="${u}" ${n.unit===u?'selected':''}>${u}</option>`).join('')}
+        </select>
+      </div>
+      <div class="formfield"><label>Varsle ved (min. beholdning)</label><input type="number" value="${n.minStock}" oninput="state.newItem.minStock=this.value;" /></div>
+    </div>
+    <div class="savebar"><button class="primarybtn" style="width:auto; padding:12px 22px;" onclick="addItem()">Legg til vare</button></div>
+  `;
+}
+
+function renderQr(){
+  const base = state.settings.appUrl;
+  const cards = state.items.map(i=>`
+    <div class="qrcard">
+      <div class="qrbox" id="qr-${i.id}">${base ? '' : '<div class="qrplaceholder">Venter på lenke til ansatt-appen</div>'}</div>
+      <div class="name">${esc(i.name)}</div>
+      <div class="cat">${esc(i.category)}</div>
+      ${base ? '<button class="smallbtn noprint" onclick="window.print()">Skriv ut</button>' : ''}
+    </div>
+  `).join('');
+  if(base){
+    setTimeout(()=>{
+      state.items.forEach(i=>{
+        const el = document.getElementById('qr-'+i.id);
+        if(el && window.QRCode){
+          el.innerHTML='';
+          new QRCode(el, {text: shelfUrl(i.id), width:150, height:150, colorDark:'#12192B', colorLight:'#ffffff'});
+        }
+      });
+    }, 0);
+  }
+  return `
+    <h1>QR-koder for hylle</h1>
+    ${base
+      ? `<p style="color:var(--muted); font-size:14px; margin-bottom:18px;">Skriv ut og heng ved riktig hylle. Skanning med telefonkamera åpner direkte til loggeskjemaet for varen.</p>
+         <button class="secondarybtn noprint" style="margin-bottom:16px;" onclick="window.print()">Skriv ut alle</button>`
+      : `<div class="noteband">QR-kodene kan ikke lages ennå - ansatt-appen er ikke bygget/lenket opp. Legg inn lenken under Innstillinger når den finnes, så genereres kodene automatisk.</div>`
+    }
+    <div class="qrgrid">${cards || '<p style="color:var(--muted);">Ingen varer ennå.</p>'}</div>
+  `;
+}
+
+function renderLogg(){
+  const q = (state.logSearch || '').toLowerCase();
+  const filtered = state.logs.filter(l => !q || l.employee.toLowerCase().includes(q) || l.itemName.toLowerCase().includes(q));
+
+  const byEmployee = {};
+  state.logs.forEach(l=>{
+    const key = l.employee || 'Ukjent';
+    if(!byEmployee[key]) byEmployee[key] = { totalQty:0, count:0, last:l.ts };
+    byEmployee[key].totalQty += l.qty;
+    byEmployee[key].count += 1;
+    if(l.ts > byEmployee[key].last) byEmployee[key].last = l.ts;
+  });
+  const summaryRows = Object.entries(byEmployee)
+    .sort((a,b)=> b[1].totalQty - a[1].totalQty)
+    .map(([name, s])=>`
+      <tr><td>${esc(name)}</td><td class="num">${s.totalQty}</td><td class="num">${s.count}</td><td>${fmtDate(s.last)}</td></tr>
+    `).join('');
+
+  const logRows = filtered.map(l=>`
+    <tr><td>${fmtDate(l.ts)}</td><td>${esc(l.itemName)}</td><td class="num">${l.qty}</td><td>${esc(l.employee)}</td></tr>
+  `).join('');
+
+  return `
+    <h1>Uttakslogg</h1>
+    <h3 style="font-size:16px; margin-bottom:10px;">Oversikt per ansatt</h3>
+    <table style="margin-bottom:30px;">
+      <thead><tr><th>Ansatt</th><th>Antall tatt ut totalt</th><th>Antall uttak</th><th>Siste uttak</th></tr></thead>
+      <tbody>${summaryRows || '<tr><td colspan="4" style="color:var(--muted); padding:20px;">Ingen uttak logget ennå.</td></tr>'}</tbody>
+    </table>
+
+    <h3 style="font-size:16px; margin-bottom:10px;">Alle uttak</h3>
+    <input type="text" placeholder="Søk på ansatt eller vare..." value="${esc(state.logSearch||'')}" data-focus-id="logSearch"
+      style="width:100%; max-width:320px; padding:9px 12px; border:1.5px solid var(--line); border-radius:3px; font-size:14px; margin-bottom:12px;"
+      oninput="state.logSearch=this.value; render();" />
+    <table>
+      <thead><tr><th>Tidspunkt</th><th>Vare</th><th>Antall</th><th>Ansatt</th></tr></thead>
+      <tbody>${logRows || '<tr><td colspan="4" style="color:var(--muted); padding:20px;">Ingen treff.</td></tr>'}</tbody>
+    </table>
+  `;
+}
+
+function renderInnstillinger(){
+  const s = state.settings;
+  return `
+    <h1>Innstillinger</h1>
+    <h3 style="font-size:16px; margin-bottom:10px;">Konto</h3>
+    <p style="color:var(--muted); font-size:13px; margin-bottom:14px;">Innlogget som ${esc(s.email)}. Nåværende passord kreves for å lagre endringer her.</p>
+    <div class="formgrid">
+      <div class="formfield"><label>E-post</label><input type="email" value="${esc(state.acctEmail || s.email)}" oninput="state.acctEmail=this.value;" /></div>
+      <div class="formfield"><label>Nåværende passord</label><input type="password" value="${esc(state.acctCurrentPassword)}" oninput="state.acctCurrentPassword=this.value;" /></div>
+      <div class="formfield"><label>Nytt passord (valgfritt)</label><input type="password" value="${esc(state.acctNewPassword)}" oninput="state.acctNewPassword=this.value;" placeholder="La stå tomt for å beholde" /></div>
+      <div class="formfield"><label>Bekreft nytt passord</label><input type="password" value="${esc(state.acctNewPasswordConfirm)}" oninput="state.acctNewPasswordConfirm=this.value;" /></div>
+    </div>
+    <label style="display:flex; align-items:center; gap:8px; font-size:13px; margin-top:14px; cursor:pointer;">
+      <input type="checkbox" ${state.acctRegenCode?'checked':''} onchange="state.acctRegenCode=this.checked;" />
+      Lag ny gjenopprettingskode (ugyldiggjør den gamle)
+    </label>
+    ${state.acctMsg?`<p style="font-size:13px; color:${state.acctMsg==='Lagret.'?'var(--muted)':'var(--danger)'}; margin-top:8px;">${esc(state.acctMsg)}</p>`:''}
+    <div class="savebar"><button class="secondarybtn" onclick="saveAccountSettings()">Lagre</button></div>
+
+    <h3 style="font-size:16px; margin:30px 0 10px;">Ansatt-appens lenke</h3>
+    <p style="color:var(--muted); font-size:13px; margin-bottom:10px;">Brukes til å generere QR-kodene under «QR-koder». Fylles inn når appen er laget - la stå tom inntil videre.</p>
+    <input type="text" placeholder="https://... (kommer senere)" value="${esc(state.appUrlDraft || s.appUrl || '')}"
+      style="width:100%; max-width:420px; padding:10px 12px; border:1.5px solid var(--line); border-radius:3px; font-size:14px;"
+      oninput="state.appUrlDraft=this.value;" />
+    ${state.appUrlMsg?`<p style="font-size:13px; color:var(--muted); margin-top:6px;">${esc(state.appUrlMsg)}</p>`:''}
+    <div class="savebar"><button class="secondarybtn" onclick="saveAppUrl()">Lagre lenke</button></div>
+
+    <h3 style="font-size:16px; margin:30px 0 10px;">Demo-data</h3>
+    ${state.confirmReset ? `
+      <div class="confirmrow">
+        Dette sletter alle varer og all logg, og setter inn eksempeldata på nytt. Sikker?
+        <button class="smallbtn" onclick="resetDemoData()">Ja, nullstill</button>
+        <button class="smallbtn" onclick="state.confirmReset=false; render();">Avbryt</button>
+      </div>` : `
+      <button class="dangerbtn" onclick="state.confirmReset=true; render();">Nullstill til eksempeldata</button>
+    `}
+  `;
+}
+
+function renderDashboard(){
+  let body;
+  if(state.adminTab==='oversikt') body = renderOversikt();
+  else if(state.adminTab==='nyvare') body = renderNyVare();
+  else if(state.adminTab==='qr') body = renderQr();
+  else if(state.adminTab==='logg') body = renderLogg();
+  else body = renderInnstillinger();
+
+  return `<div class="adminshell">
+    ${renderAdminNav()}
+    <div class="adminmain">${body}</div>
+  </div>`;
+}
+
+/* ============ top-level render ============ */
+function render(){
+  const app = document.getElementById('app');
+  if(!state.loaded){
+    app.innerHTML = `<div class="center-note"><div class="spinner"></div>Laster lagerdata …</div>`;
+    return;
+  }
+
+  const active = document.activeElement;
+  let focusInfo = null;
+  if(active && active.dataset && active.dataset.focusId && app.contains(active)){
+    focusInfo = { id: active.dataset.focusId, start: active.selectionStart, end: active.selectionEnd };
+  }
+
+  let body;
+  if(!state.settings) body = renderAdminSetup();
+  else if(state.justRecoveryCode) body = renderRecoveryCodeDisplay();
+  else if(!state.adminUnlocked) body = state.showRecovery ? renderRecoveryForm() : renderAdminLogin();
+  else body = renderDashboard();
+
+  app.innerHTML = `
+    <div class="topbar">
+      <span class="mark"></span>
+      <span class="word">BRAVIDA</span>
+      <span class="sub">KONTORSJEF</span>
+    </div>
+    ${body}
+  `;
+
+  if(focusInfo){
+    const el = app.querySelector('[data-focus-id="'+focusInfo.id+'"]');
+    if(el){
+      el.focus();
+      if(typeof focusInfo.start === 'number' && el.setSelectionRange){
+        try{ el.setSelectionRange(focusInfo.start, focusInfo.end); }catch(e){}
+      }
+    }
+  }
+}
+
+init();
+</script>
+</body>
+</html>
