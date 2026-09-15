@@ -85,6 +85,7 @@
     font-size:14px; font-weight:600; box-shadow:0 4px 14px rgba(0,0,0,0.25);
     z-index:50; animation:toastIn 0.25s ease;
   }
+  .toast.danger{ background:var(--danger); }
   @keyframes toastIn{ from{opacity:0; transform:translate(-50%,-8px);} to{opacity:1; transform:translate(-50%,0);} }
   @media (prefers-reduced-motion: reduce){ .toast{animation:none;} }
 
@@ -177,11 +178,12 @@ let state = {
   newItemError:'',
   acctEmail:'', acctCurrentPassword:'', acctNewPassword:'', acctNewPasswordConfirm:'', acctRegenCode:false, acctMsg:'',
   appUrlDraft:'', appUrlMsg:'',
-  toastMsg:null
+  toastMsg:null, toastType:'success'
 };
 let toastTimer = null;
-function showToast(msg){
+function showToast(msg, type){
   state.toastMsg = msg;
+  state.toastType = type || 'success';
   render();
   clearTimeout(toastTimer);
   toastTimer = setTimeout(()=>{ state.toastMsg = null; render(); }, 2500);
@@ -384,7 +386,8 @@ function saveEdit(){
 function deleteItem(id){
   state.items = state.items.filter(i=>i.id!==id);
   state.confirmDeleteId = null;
-  saveItems(); render();
+  saveItems();
+  showToast('Vare slettet.', 'danger');
 }
 async function resetDemoData(){
   state.items = seedItems();
@@ -718,7 +721,7 @@ function render(){
       <span class="word">BRAVIDA</span>
       <span class="sub">LAGER</span>
     </div>
-    ${state.toastMsg ? `<div class="toast">${esc(state.toastMsg)}</div>` : ''}
+    ${state.toastMsg ? `<div class="toast ${state.toastType==='danger'?'danger':''}">${esc(state.toastMsg)}</div>` : ''}
     ${body}
   `;
 
