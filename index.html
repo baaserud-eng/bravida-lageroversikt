@@ -4,6 +4,8 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Bravida Lager – Kontorsjef</title>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -150,18 +152,32 @@
 <div id="app"></div>
 
 <script>
-/* ============ storage helpers ============ */
+/* ============ storage helpers (Firebase Firestore - shared, real database) ============ */
+const firebaseConfig = {
+  apiKey: "AIzaSyA1is42oivHBlDrrUapyZwrztCUq0HwpC8",
+  authDomain: "bravida-lager.firebaseapp.com",
+  projectId: "bravida-lager",
+  storageBucket: "bravida-lager.firebasestorage.app",
+  messagingSenderId: "358302083961",
+  appId: "1:358302083961:web:ab58c6e58c9a14ab611da8"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+const FIREBASE_COLLECTION = 'bravida-lager';
+
 async function storageGet(key, shared){
   try{
-    const res = await window.storage.get(key, shared);
-    return res ? JSON.parse(res.value) : null;
-  }catch(e){ return null; }
+    const snap = await db.collection(FIREBASE_COLLECTION).doc(key).get();
+    if(!snap.exists) return null;
+    const data = snap.data();
+    return (data && Object.prototype.hasOwnProperty.call(data, 'value')) ? data.value : null;
+  }catch(e){ console.error('storage get failed', key, e); return null; }
 }
 async function storageSet(key, value, shared){
   try{
-    const res = await window.storage.set(key, JSON.stringify(value), shared);
-    return !!res;
-  }catch(e){ console.error('storage.set failed', key, e); return false; }
+    await db.collection(FIREBASE_COLLECTION).doc(key).set({ value });
+    return true;
+  }catch(e){ console.error('storage set failed', key, e); return false; }
 }
 
 /* ============ state ============ */
@@ -707,7 +723,7 @@ function renderLogg(){
   const hasAnyAo = state.logs.some(l=>l.aoNummer && l.aoNummer.trim());
 
   const logRows = filtered.map(l=>`
-    <tr><td>${fmtDate(l.ts)}</td><td>${esc(l.itemName)}</td><td class="num">${l.qty}</td><td>${esc(l.employee)}</td><td>${esc(l.aoNummer || '–')}</td></tr>
+    <tr><td>${fmtDate(l.ts)}</td><td>${esc(l.itemName)}</td><td class="num">${l.qty}</td><td>${esc(l.employee)}</td><td>${esc(l.aoNummer || '–')}</td><td class="num">${typeof l.remainingAfter==='number' ? l.remainingAfter : '–'}</td></tr>
   `).join('');
 
   return `
@@ -731,8 +747,8 @@ function renderLogg(){
       style="width:100%; max-width:320px; padding:9px 12px; border:1.5px solid var(--line); border-radius:3px; font-size:14px; margin-bottom:12px;"
       oninput="state.logSearch=this.value; render();" />
     <table>
-      <thead><tr><th>Tidspunkt</th><th>Vare</th><th>Antall</th><th>Ansatt</th><th>AO-nummer</th></tr></thead>
-      <tbody>${logRows || '<tr><td colspan="5" style="color:var(--muted); padding:20px;">Ingen treff.</td></tr>'}</tbody>
+      <thead><tr><th>Tidspunkt</th><th>Vare</th><th>Antall</th><th>Ansatt</th><th>AO-nummer</th><th>Igjen etter uttak</th></tr></thead>
+      <tbody>${logRows || '<tr><td colspan="6" style="color:var(--muted); padding:20px;">Ingen treff.</td></tr>'}</tbody>
     </table>
   `;
 }
