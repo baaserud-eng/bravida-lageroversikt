@@ -203,7 +203,7 @@ let state = {
   confirmReset:false,
   logSearch:'',
   oversiktSearch:'',
-  newItem:{ name:'', produktnummer:'', category:CATEGORIES[0], qty:0, unit:'stk', minStock:0 },
+  newItem:{ name:'', produktnummer:'', category:CATEGORIES[0], qty:0, unit:'stk', minStock:0, pris:0 },
   newItemError:'',
   acctEmail:'', acctCurrentPassword:'', acctNewPassword:'', acctNewPasswordConfirm:'', acctRegenCode:false, acctMsg:'',
   appUrlDraft:'', appUrlMsg:'',
@@ -264,12 +264,12 @@ function uid(){
 }
 function seedItems(){
   return [
-    {id:uid(), name:'Brannalarm', produktnummer:'', category:'Brannsikkerhet', qty:24, unit:'stk', minStock:5},
-    {id:uid(), name:'Røykvarsler', produktnummer:'', category:'Brannsikkerhet', qty:40, unit:'stk', minStock:10},
-    {id:uid(), name:'Sikring 16A', produktnummer:'', category:'Elektro', qty:150, unit:'stk', minStock:20},
-    {id:uid(), name:'Kabelrør 20mm', produktnummer:'', category:'Elektro', qty:80, unit:'meter', minStock:15},
-    {id:uid(), name:'PEX-rør 20mm', produktnummer:'', category:'Annet', qty:60, unit:'meter', minStock:10},
-    {id:uid(), name:'Termostat', produktnummer:'', category:'Ventilasjon', qty:18, unit:'stk', minStock:4}
+    {id:uid(), name:'Brannalarm', produktnummer:'', category:'Brannsikkerhet', qty:24, unit:'stk', minStock:5, pris:0},
+    {id:uid(), name:'Røykvarsler', produktnummer:'', category:'Brannsikkerhet', qty:40, unit:'stk', minStock:10, pris:0},
+    {id:uid(), name:'Sikring 16A', produktnummer:'', category:'Elektro', qty:150, unit:'stk', minStock:20, pris:0},
+    {id:uid(), name:'Kabelrør 20mm', produktnummer:'', category:'Elektro', qty:80, unit:'meter', minStock:15, pris:0},
+    {id:uid(), name:'PEX-rør 20mm', produktnummer:'', category:'Annet', qty:60, unit:'meter', minStock:10, pris:0},
+    {id:uid(), name:'Termostat', produktnummer:'', category:'Ventilasjon', qty:18, unit:'stk', minStock:4, pris:0}
   ];
 }
 
@@ -426,8 +426,8 @@ function addItem(){
   const n = state.newItem;
   if(!n.name.trim()){ state.newItemError = 'Du må skrive et varenavn.'; render(); return; }
   state.newItemError = '';
-  state.items.push({id:uid(), name:n.name.trim(), produktnummer:(n.produktnummer||'').trim(), category:n.category, qty:Math.max(0,Number(n.qty)||0), unit:n.unit, minStock:Math.max(0,Number(n.minStock)||0)});
-  state.newItem = {name:'', produktnummer:'', category:CATEGORIES[0], qty:0, unit:'stk', minStock:0};
+  state.items.push({id:uid(), name:n.name.trim(), produktnummer:(n.produktnummer||'').trim(), category:n.category, qty:Math.max(0,Number(n.qty)||0), unit:n.unit, minStock:Math.max(0,Number(n.minStock)||0), pris:Math.max(0,Number(n.pris)||0)});
+  state.newItem = {name:'', produktnummer:'', category:CATEGORIES[0], qty:0, unit:'stk', minStock:0, pris:0};
   checkLowStockNotifications();
   saveItems();
   showToast('Vare lagt til.');
@@ -437,7 +437,7 @@ function cancelEdit(){ state.editingId = null; render(); }
 function saveEdit(){
   const idx = state.items.findIndex(i=>i.id===state.editingId);
   if(idx>-1){
-    state.items[idx] = {...state.editDraft, qty:Math.max(0,Number(state.editDraft.qty)||0), minStock:Math.max(0,Number(state.editDraft.minStock)||0)};
+    state.items[idx] = {...state.editDraft, qty:Math.max(0,Number(state.editDraft.qty)||0), minStock:Math.max(0,Number(state.editDraft.minStock)||0), pris:Math.max(0,Number(state.editDraft.pris)||0)};
   }
   state.editingId = null;
   checkLowStockNotifications();
@@ -469,6 +469,10 @@ function fmtDate(iso){
   try{ return new Date(iso).toLocaleString('nb-NO', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); }catch(e){ return iso; }
 }
 function isLow(item){ return item.qty <= item.minStock; }
+function fmtKr(n){
+  const num = Number(n)||0;
+  return num.toLocaleString('nb-NO', {minimumFractionDigits:0, maximumFractionDigits:2}) + ' kr';
+}
 function shelfUrl(itemId){
   const base = (state.settings && state.settings.appUrl) ? state.settings.appUrl.trim() : '';
   return base ? (base + '#item=' + itemId) : '';
@@ -483,6 +487,7 @@ function exportOversiktToExcel(){
     'Kategori': item.category,
     'Antall': item.qty,
     'Enhet': item.unit,
+    'Pris': item.pris || 0,
     'Min. beholdning': item.minStock,
     'Lav beholdning': isLow(item) ? 'Ja' : 'Nei'
   }));
@@ -504,6 +509,78 @@ function exportLoggToExcel(){
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Uttakslogg');
   XLSX.writeFile(wb, 'bravida-uttakslogg-' + todayStamp() + '.xlsx');
+}
+
+/* ============ Excel-import ============ */
+function pickField(row, candidates){
+  const keys = Object.keys(row);
+  for(const cand of candidates){
+    const found = keys.find(k => k.trim().toLowerCase() === cand.toLowerCase());
+    if(found !== undefined) return row[found];
+  }
+  return '';
+}
+function importItemsFromRows(rows){
+  let added = 0;
+  rows.forEach(row=>{
+    const name = String(pickField(row, ['Vare','Navn','Produkt','Artikkel']) || '').trim();
+    if(!name) return;
+    const produktnummer = String(pickField(row, ['Produktnummer','Art.nr','Artnr','Varenummer','SKU']) || '').trim();
+    const category = String(pickField(row, ['Kategori','Type']) || '').trim() || 'Annet';
+    const qty = Math.max(0, Number(pickField(row, ['Antall','Beholdning','Lager','Qty'])) || 0);
+    const unit = String(pickField(row, ['Enhet','Unit']) || '').trim() || 'stk';
+    const pris = Math.max(0, Number(pickField(row, ['Pris','Price','Kr','Enhetspris'])) || 0);
+    const minStock = Math.max(0, Number(pickField(row, ['Min. beholdning','Min','Minimum','MinStock'])) || 0);
+    state.items.push({id:uid(), name, produktnummer, category, qty, unit, minStock, pris});
+    added++;
+  });
+  if(added > 0){
+    checkLowStockNotifications();
+    saveItems();
+    showToast(added + (added===1 ? ' vare importert.' : ' varer importert.'));
+  }else{
+    showToast('Fant ingen gyldige varer i filen.', 'danger');
+  }
+  return added;
+}
+function findHeaderRowIndex(aoa){
+  const nameCandidates = ['vare','navn','produkt','artikkel'];
+  for(let i=0;i<aoa.length;i++){
+    const row = aoa[i] || [];
+    const hasNameHeader = row.some(cell => nameCandidates.includes(String(cell||'').trim().toLowerCase()));
+    if(hasNameHeader) return i;
+  }
+  return -1;
+}
+function rowsFromAoa(aoa){
+  const headerIdx = findHeaderRowIndex(aoa);
+  if(headerIdx === -1) return [];
+  const headers = aoa[headerIdx].map(h => String(h||'').trim());
+  const dataRows = aoa.slice(headerIdx+1);
+  return dataRows.map(r=>{
+    const obj = {};
+    headers.forEach((h,i)=>{ if(h) obj[h] = (r[i]!==undefined && r[i]!==null) ? r[i] : ''; });
+    return obj;
+  });
+}
+function handleImportFile(event){
+  const file = event.target.files && event.target.files[0];
+  event.target.value = ''; // slik at samme fil kan velges på nytt senere
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e){
+    try{
+      const data = new Uint8Array(e.target.result);
+      const wb = XLSX.read(data, {type:'array'});
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows = rowsFromAoa(XLSX.utils.sheet_to_json(sheet, {header:1, defval:''}));
+      importItemsFromRows(rows);
+    }catch(err){
+      console.error('import failed', err);
+      showToast('Klarte ikke å lese filen. Sjekk at det er en gyldig Excel- eller CSV-fil.', 'danger');
+    }
+  };
+  reader.readAsArrayBuffer(file);
 }
 
 /* ============ render: gate screens ============ */
@@ -604,7 +681,7 @@ function renderOversikt(){
   const rows = visibleItems.map(item=>{
     if(state.editingId === item.id){
       const d = state.editDraft;
-      return `<tr><td colspan="7">
+      return `<tr><td colspan="8">
         <div class="inlineedit">
           <div class="formgrid">
             <div class="formfield"><label>Navn</label><input type="text" value="${esc(d.name)}" oninput="state.editDraft.name=this.value;" /></div>
@@ -620,6 +697,7 @@ function renderOversikt(){
                 ${UNITS.map(u=>`<option value="${u}" ${d.unit===u?'selected':''}>${u}</option>`).join('')}
               </select>
             </div>
+            <div class="formfield"><label>Pris per enhet (kr)</label><input type="number" step="0.01" value="${d.pris||0}" oninput="state.editDraft.pris=this.value;" /></div>
             <div class="formfield"><label>Min. beholdning (varsel)</label><input type="number" value="${d.minStock}" oninput="state.editDraft.minStock=this.value;" /></div>
           </div>
           <div class="savebar rowbtns">
@@ -631,7 +709,7 @@ function renderOversikt(){
     }
     if(state.confirmDeleteId === item.id){
       return `<tr class="${isLow(item)?'lowrow':''}">
-        <td colspan="7">
+        <td colspan="8">
           <div class="confirmrow">
             Slette «${esc(item.name)}» permanent?
             <button class="smallbtn" onclick="deleteItem('${item.id}')">Ja, slett</button>
@@ -645,6 +723,7 @@ function renderOversikt(){
       <td class="num">${esc(item.produktnummer || '–')}</td>
       <td>${esc(item.category)}</td>
       <td class="num">${item.qty} ${esc(item.unit)}</td>
+      <td class="num">${fmtKr(item.pris)}</td>
       <td class="num">${item.minStock}</td>
       <td>${isLow(item)?'<span style="color:var(--danger); font-weight:600; font-size:12.5px;">LAV</span>':''}</td>
       <td><div class="rowbtns">
@@ -654,6 +733,8 @@ function renderOversikt(){
     </tr>`;
   }).join('');
 
+  const totalValue = state.items.reduce((sum,i)=> sum + (Number(i.pris)||0) * (Number(i.qty)||0), 0);
+
   return `
     <h1>Lageroversikt</h1>
     <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px;">
@@ -661,10 +742,14 @@ function renderOversikt(){
         style="flex:1; min-width:200px; max-width:320px; padding:9px 12px; border:1.5px solid var(--line); border-radius:3px; font-size:14px;"
         oninput="state.oversiktSearch=this.value; render();" />
       <button class="secondarybtn" onclick="exportOversiktToExcel()">📥 Eksporter til Excel</button>
+      <input type="file" id="importFileInput" accept=".xlsx,.xls,.csv" style="display:none;" onchange="handleImportFile(event)" />
+      <button class="secondarybtn" onclick="document.getElementById('importFileInput').click()">📤 Importer fra Excel</button>
     </div>
+    <p style="color:var(--muted); font-size:12.5px; margin:-8px 0 6px;">Importfilen bør ha kolonner som Vare, Produktnummer, Kategori, Antall, Enhet, Pris og Min. beholdning - samme oppsett som eksport-filen. Nye varer legges til; eksisterende blir ikke overskrevet.</p>
+    <p style="color:var(--muted); font-size:13px; margin:0 0 14px;">Total lagerverdi: <strong class="num" style="color:var(--ink);">${fmtKr(totalValue)}</strong></p>
     <table>
-      <thead><tr><th>Vare</th><th>Produktnummer</th><th>Kategori</th><th>Antall</th><th>Min.</th><th></th><th></th></tr></thead>
-      <tbody>${rows || `<tr><td colspan="7" style="color:var(--muted); padding:20px;">${state.items.length ? 'Ingen varer matcher søket.' : 'Ingen varer registrert ennå.'}</td></tr>`}</tbody>
+      <thead><tr><th>Vare</th><th>Produktnummer</th><th>Kategori</th><th>Antall</th><th>Pris</th><th>Min.</th><th></th><th></th></tr></thead>
+      <tbody>${rows || `<tr><td colspan="8" style="color:var(--muted); padding:20px;">${state.items.length ? 'Ingen varer matcher søket.' : 'Ingen varer registrert ennå.'}</td></tr>`}</tbody>
     </table>
   `;
 }
@@ -689,6 +774,7 @@ function renderNyVare(){
         </select>
       </div>
       <div class="formfield"><label>Varsle ved (min. beholdning)</label><input type="number" value="${n.minStock}" oninput="state.newItem.minStock=this.value;" /></div>
+      <div class="formfield"><label>Pris per enhet (kr)</label><input type="number" step="0.01" value="${n.pris}" oninput="state.newItem.pris=this.value;" placeholder="0" /></div>
     </div>
     <div class="savebar"><button class="primarybtn" style="width:auto; padding:12px 22px;" onclick="addItem()">Legg til vare</button></div>
   `;
