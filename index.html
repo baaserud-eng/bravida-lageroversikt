@@ -202,7 +202,7 @@ let state = {
   confirmReset:false,
   logSearch:'',
   oversiktSearch:'',
-  newItem:{ name:'', category:CATEGORIES[0], qty:0, unit:'stk', minStock:0 },
+  newItem:{ name:'', produktnummer:'', category:CATEGORIES[0], qty:0, unit:'stk', minStock:0 },
   newItemError:'',
   acctEmail:'', acctCurrentPassword:'', acctNewPassword:'', acctNewPasswordConfirm:'', acctRegenCode:false, acctMsg:'',
   appUrlDraft:'', appUrlMsg:'',
@@ -263,12 +263,12 @@ function uid(){
 }
 function seedItems(){
   return [
-    {id:uid(), name:'Brannalarm', category:'Brannsikkerhet', qty:24, unit:'stk', minStock:5},
-    {id:uid(), name:'Røykvarsler', category:'Brannsikkerhet', qty:40, unit:'stk', minStock:10},
-    {id:uid(), name:'Sikring 16A', category:'Elektro', qty:150, unit:'stk', minStock:20},
-    {id:uid(), name:'Kabelrør 20mm', category:'Elektro', qty:80, unit:'meter', minStock:15},
-    {id:uid(), name:'PEX-rør 20mm', category:'VVS', qty:60, unit:'meter', minStock:10},
-    {id:uid(), name:'Termostat', category:'Ventilasjon', qty:18, unit:'stk', minStock:4}
+    {id:uid(), name:'Brannalarm', produktnummer:'', category:'Brannsikkerhet', qty:24, unit:'stk', minStock:5},
+    {id:uid(), name:'Røykvarsler', produktnummer:'', category:'Brannsikkerhet', qty:40, unit:'stk', minStock:10},
+    {id:uid(), name:'Sikring 16A', produktnummer:'', category:'Elektro', qty:150, unit:'stk', minStock:20},
+    {id:uid(), name:'Kabelrør 20mm', produktnummer:'', category:'Elektro', qty:80, unit:'meter', minStock:15},
+    {id:uid(), name:'PEX-rør 20mm', produktnummer:'', category:'VVS', qty:60, unit:'meter', minStock:10},
+    {id:uid(), name:'Termostat', produktnummer:'', category:'Ventilasjon', qty:18, unit:'stk', minStock:4}
   ];
 }
 
@@ -425,8 +425,8 @@ function addItem(){
   const n = state.newItem;
   if(!n.name.trim()){ state.newItemError = 'Du må skrive et varenavn.'; render(); return; }
   state.newItemError = '';
-  state.items.push({id:uid(), name:n.name.trim(), category:n.category, qty:Math.max(0,Number(n.qty)||0), unit:n.unit, minStock:Math.max(0,Number(n.minStock)||0)});
-  state.newItem = {name:'', category:CATEGORIES[0], qty:0, unit:'stk', minStock:0};
+  state.items.push({id:uid(), name:n.name.trim(), produktnummer:(n.produktnummer||'').trim(), category:n.category, qty:Math.max(0,Number(n.qty)||0), unit:n.unit, minStock:Math.max(0,Number(n.minStock)||0)});
+  state.newItem = {name:'', produktnummer:'', category:CATEGORIES[0], qty:0, unit:'stk', minStock:0};
   checkLowStockNotifications();
   saveItems();
   showToast('Vare lagt til.');
@@ -564,16 +564,17 @@ function renderAdminNav(){
 function renderOversikt(){
   const q = (state.oversiktSearch || '').toLowerCase();
   const visibleItems = state.items.filter(item =>
-    !q || item.name.toLowerCase().includes(q) || item.category.toLowerCase().includes(q)
+    !q || item.name.toLowerCase().includes(q) || item.category.toLowerCase().includes(q) || (item.produktnummer||'').toLowerCase().includes(q)
   );
 
   const rows = visibleItems.map(item=>{
     if(state.editingId === item.id){
       const d = state.editDraft;
-      return `<tr><td colspan="6">
+      return `<tr><td colspan="7">
         <div class="inlineedit">
           <div class="formgrid">
             <div class="formfield"><label>Navn</label><input type="text" value="${esc(d.name)}" oninput="state.editDraft.name=this.value;" /></div>
+            <div class="formfield"><label>Produktnummer</label><input type="text" value="${esc(d.produktnummer||'')}" oninput="state.editDraft.produktnummer=this.value;" /></div>
             <div class="formfield"><label>Kategori</label>
               <select onchange="state.editDraft.category=this.value;">
                 ${CATEGORIES.map(c=>`<option value="${c}" ${d.category===c?'selected':''}>${c}</option>`).join('')}
@@ -596,7 +597,7 @@ function renderOversikt(){
     }
     if(state.confirmDeleteId === item.id){
       return `<tr class="${isLow(item)?'lowrow':''}">
-        <td colspan="6">
+        <td colspan="7">
           <div class="confirmrow">
             Slette «${esc(item.name)}» permanent?
             <button class="smallbtn" onclick="deleteItem('${item.id}')">Ja, slett</button>
@@ -607,6 +608,7 @@ function renderOversikt(){
     }
     return `<tr class="${isLow(item)?'lowrow':''}">
       <td>${esc(item.name)}</td>
+      <td class="num">${esc(item.produktnummer || '–')}</td>
       <td>${esc(item.category)}</td>
       <td class="num">${item.qty} ${esc(item.unit)}</td>
       <td class="num">${item.minStock}</td>
@@ -620,12 +622,12 @@ function renderOversikt(){
 
   return `
     <h1>Lageroversikt</h1>
-    <input type="text" placeholder="Søk etter vare..." value="${esc(state.oversiktSearch||'')}" data-focus-id="oversiktSearch"
+    <input type="text" placeholder="Søk etter vare eller produktnummer..." value="${esc(state.oversiktSearch||'')}" data-focus-id="oversiktSearch"
       style="width:100%; max-width:320px; padding:9px 12px; border:1.5px solid var(--line); border-radius:3px; font-size:14px; margin-bottom:14px;"
       oninput="state.oversiktSearch=this.value; render();" />
     <table>
-      <thead><tr><th>Vare</th><th>Kategori</th><th>Antall</th><th>Min.</th><th></th><th></th></tr></thead>
-      <tbody>${rows || `<tr><td colspan="6" style="color:var(--muted); padding:20px;">${state.items.length ? 'Ingen varer matcher søket.' : 'Ingen varer registrert ennå.'}</td></tr>`}</tbody>
+      <thead><tr><th>Vare</th><th>Produktnummer</th><th>Kategori</th><th>Antall</th><th>Min.</th><th></th><th></th></tr></thead>
+      <tbody>${rows || `<tr><td colspan="7" style="color:var(--muted); padding:20px;">${state.items.length ? 'Ingen varer matcher søket.' : 'Ingen varer registrert ennå.'}</td></tr>`}</tbody>
     </table>
   `;
 }
@@ -637,6 +639,7 @@ function renderNyVare(){
     ${state.newItemError?`<div class="errmsg">${esc(state.newItemError)}</div>`:''}
     <div class="formgrid">
       <div class="formfield"><label>Navn</label><input type="text" value="${esc(n.name)}" oninput="state.newItem.name=this.value;" placeholder="F.eks. Brannalarm" /></div>
+      <div class="formfield"><label>Produktnummer</label><input type="text" value="${esc(n.produktnummer)}" oninput="state.newItem.produktnummer=this.value;" placeholder="Valgfritt" /></div>
       <div class="formfield"><label>Kategori</label>
         <select onchange="state.newItem.category=this.value;">
           ${CATEGORIES.map(c=>`<option value="${c}" ${n.category===c?'selected':''}>${c}</option>`).join('')}
