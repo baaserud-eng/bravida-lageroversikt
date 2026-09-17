@@ -737,16 +737,18 @@ function renderOversikt(){
 
   return `
     <h1>Lageroversikt</h1>
-    <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px;">
+    <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:18px;">
       <input type="text" placeholder="Søk etter vare eller produktnummer..." value="${esc(state.oversiktSearch||'')}" data-focus-id="oversiktSearch"
         style="flex:1; min-width:200px; max-width:320px; padding:9px 12px; border:1.5px solid var(--line); border-radius:3px; font-size:14px;"
         oninput="state.oversiktSearch=this.value; render();" />
       <button class="secondarybtn" onclick="exportOversiktToExcel()">📥 Eksporter til Excel</button>
       <input type="file" id="importFileInput" accept=".xlsx,.xls,.csv" style="display:none;" onchange="handleImportFile(event)" />
       <button class="secondarybtn" onclick="document.getElementById('importFileInput').click()">📤 Importer fra Excel</button>
+      <div style="padding:8px 16px; background:var(--card); border:1.5px solid var(--line); border-radius:3px;">
+        <span style="font-size:11.5px; color:var(--muted); display:block; text-transform:uppercase; letter-spacing:0.04em;">Total lagerverdi</span>
+        <span class="num" style="font-size:24px; font-weight:700; color:var(--ink);">${fmtKr(totalValue)}</span>
+      </div>
     </div>
-    <p style="color:var(--muted); font-size:12.5px; margin:-8px 0 6px;">Importfilen bør ha kolonner som Vare, Produktnummer, Kategori, Antall, Enhet, Pris og Min. beholdning - samme oppsett som eksport-filen. Nye varer legges til; eksisterende blir ikke overskrevet.</p>
-    <p style="color:var(--muted); font-size:13px; margin:0 0 14px;">Total lagerverdi: <strong class="num" style="color:var(--ink);">${fmtKr(totalValue)}</strong></p>
     <table>
       <thead><tr><th>Vare</th><th>Produktnummer</th><th>Kategori</th><th>Antall</th><th>Pris</th><th>Min.</th><th></th><th></th></tr></thead>
       <tbody>${rows || `<tr><td colspan="8" style="color:var(--muted); padding:20px;">${state.items.length ? 'Ingen varer matcher søket.' : 'Ingen varer registrert ennå.'}</td></tr>`}</tbody>
