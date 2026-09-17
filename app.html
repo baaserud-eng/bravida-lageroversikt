@@ -189,7 +189,7 @@ async function storageSet(key, value, shared){
 }
 
 /* ============ state ============ */
-const CATEGORIES = ['Elektro','VVS','Brannsikkerhet','Ventilasjon','Annet'];
+const CATEGORIES = ['Elektro','Brannsikkerhet','Ventilasjon','Adgangskontroll','Innbruddsalarm','Kameraovervåkning','Nødlys','Annet'];
 
 let state = {
   loaded:false,
@@ -212,7 +212,7 @@ function seedItems(){
     {id:uid(), name:'Røykvarsler', category:'Brannsikkerhet', qty:40, unit:'stk', minStock:10},
     {id:uid(), name:'Sikring 16A', category:'Elektro', qty:150, unit:'stk', minStock:20},
     {id:uid(), name:'Kabelrør 20mm', category:'Elektro', qty:80, unit:'meter', minStock:15},
-    {id:uid(), name:'PEX-rør 20mm', category:'VVS', qty:60, unit:'meter', minStock:10},
+    {id:uid(), name:'PEX-rør 20mm', category:'Annet', qty:60, unit:'meter', minStock:10},
     {id:uid(), name:'Termostat', category:'Ventilasjon', qty:18, unit:'stk', minStock:4}
   ];
 }
