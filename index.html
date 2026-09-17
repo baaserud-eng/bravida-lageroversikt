@@ -9,6 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
     --ink:#12192B;
@@ -440,7 +441,8 @@ function saveEdit(){
   }
   state.editingId = null;
   checkLowStockNotifications();
-  saveItems(); render();
+  saveItems();
+  showToast('Lagret.');
 }
 function deleteItem(id){
   state.items = state.items.filter(i=>i.id!==id);
@@ -470,6 +472,38 @@ function isLow(item){ return item.qty <= item.minStock; }
 function shelfUrl(itemId){
   const base = (state.settings && state.settings.appUrl) ? state.settings.appUrl.trim() : '';
   return base ? (base + '#item=' + itemId) : '';
+}
+
+/* ============ Excel-eksport ============ */
+function todayStamp(){ return new Date().toISOString().slice(0,10); }
+function exportOversiktToExcel(){
+  const rows = state.items.map(item => ({
+    'Vare': item.name,
+    'Produktnummer': item.produktnummer || '',
+    'Kategori': item.category,
+    'Antall': item.qty,
+    'Enhet': item.unit,
+    'Min. beholdning': item.minStock,
+    'Lav beholdning': isLow(item) ? 'Ja' : 'Nei'
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Lageroversikt');
+  XLSX.writeFile(wb, 'bravida-lageroversikt-' + todayStamp() + '.xlsx');
+}
+function exportLoggToExcel(){
+  const rows = state.logs.map(l => ({
+    'Tidspunkt': fmtDate(l.ts),
+    'Vare': l.itemName,
+    'Antall': l.qty,
+    'Ansatt': l.employee,
+    'AO-nummer': l.aoNummer || '',
+    'Igjen etter uttak': typeof l.remainingAfter === 'number' ? l.remainingAfter : ''
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Uttakslogg');
+  XLSX.writeFile(wb, 'bravida-uttakslogg-' + todayStamp() + '.xlsx');
 }
 
 /* ============ render: gate screens ============ */
@@ -622,9 +656,12 @@ function renderOversikt(){
 
   return `
     <h1>Lageroversikt</h1>
-    <input type="text" placeholder="Søk etter vare eller produktnummer..." value="${esc(state.oversiktSearch||'')}" data-focus-id="oversiktSearch"
-      style="width:100%; max-width:320px; padding:9px 12px; border:1.5px solid var(--line); border-radius:3px; font-size:14px; margin-bottom:14px;"
-      oninput="state.oversiktSearch=this.value; render();" />
+    <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px;">
+      <input type="text" placeholder="Søk etter vare eller produktnummer..." value="${esc(state.oversiktSearch||'')}" data-focus-id="oversiktSearch"
+        style="flex:1; min-width:200px; max-width:320px; padding:9px 12px; border:1.5px solid var(--line); border-radius:3px; font-size:14px;"
+        oninput="state.oversiktSearch=this.value; render();" />
+      <button class="secondarybtn" onclick="exportOversiktToExcel()">📥 Eksporter til Excel</button>
+    </div>
     <table>
       <thead><tr><th>Vare</th><th>Produktnummer</th><th>Kategori</th><th>Antall</th><th>Min.</th><th></th><th></th></tr></thead>
       <tbody>${rows || `<tr><td colspan="7" style="color:var(--muted); padding:20px;">${state.items.length ? 'Ingen varer matcher søket.' : 'Ingen varer registrert ennå.'}</td></tr>`}</tbody>
@@ -746,9 +783,12 @@ function renderLogg(){
     </table>
 
     <h3 style="font-size:16px; margin-bottom:10px;">Alle uttak</h3>
-    <input type="text" placeholder="Søk på ansatt, vare eller AO-nummer..." value="${esc(state.logSearch||'')}" data-focus-id="logSearch"
-      style="width:100%; max-width:320px; padding:9px 12px; border:1.5px solid var(--line); border-radius:3px; font-size:14px; margin-bottom:12px;"
-      oninput="state.logSearch=this.value; render();" />
+    <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
+      <input type="text" placeholder="Søk på ansatt, vare eller AO-nummer..." value="${esc(state.logSearch||'')}" data-focus-id="logSearch"
+        style="flex:1; min-width:200px; max-width:320px; padding:9px 12px; border:1.5px solid var(--line); border-radius:3px; font-size:14px;"
+        oninput="state.logSearch=this.value; render();" />
+      <button class="secondarybtn" onclick="exportLoggToExcel()">📥 Eksporter til Excel</button>
+    </div>
     <table>
       <thead><tr><th>Tidspunkt</th><th>Vare</th><th>Antall</th><th>Ansatt</th><th>AO-nummer</th><th>Igjen etter uttak</th></tr></thead>
       <tbody>${logRows || '<tr><td colspan="6" style="color:var(--muted); padding:20px;">Ingen treff.</td></tr>'}</tbody>
