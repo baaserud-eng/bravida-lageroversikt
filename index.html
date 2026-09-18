@@ -6,6 +6,7 @@
 <title>Bravida Lager – Kontorsjef</title>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -164,6 +165,7 @@ const firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
+const auth = firebase.auth();
 const FIREBASE_COLLECTION = 'bravida-lager';
 
 async function storageGet(key, shared){
@@ -190,14 +192,13 @@ let state = {
   items:[],
   logs:[],
   notifications:[],
-  settings:null, // holder bare appUrl osv. - selve brukerne bor i adminUsers
-  adminUsers:[], // liste over kontorsjefer: {id, email, salt, passwordHash, recoveryHash, createdAt}
-  currentAdminId:null,
+  settings:null, // holder bare appUrl osv.
+  adminUsers:[], // katalog til visning: {email, createdAt} - selve pålogging styres av Firebase Auth
+  currentUserEmail:null,
   adminUnlocked:false,
   setupEmail:'', setupPassword:'', setupPasswordConfirm:'', setupError:'',
   loginEmail:'', loginPassword:'', loginError:'', loginFailCount:0, loginLockedUntil:0,
-  showRecovery:false, recoveryEmail:'', recoveryCode:'', recoveryNewPassword:'', recoveryNewPasswordConfirm:'', recoveryError:'',
-  justRecoveryCode:null,
+  showRecovery:false, recoveryEmail:'', recoveryError:'', recoveryMsg:'',
   adminTab:'oversikt',
   editingId:null,
   editDraft:{},
@@ -208,9 +209,8 @@ let state = {
   oversiktSearch:'',
   newItem:{ name:'', produktnummer:'', category:CATEGORIES[0], qty:0, unit:'stk', minStock:0, pris:0 },
   newItemError:'',
-  acctEmail:'', acctCurrentPassword:'', acctNewPassword:'', acctNewPasswordConfirm:'', acctRegenCode:false, acctMsg:'',
+  acctEmail:'', acctCurrentPassword:'', acctNewPassword:'', acctNewPasswordConfirm:'', acctMsg:'',
   newAdminEmail:'', newAdminPassword:'', newAdminPasswordConfirm:'', newAdminMsg:'',
-  newAdminRecoveryCode:null, newAdminRecoveryEmail:'',
   confirmDeleteAdminId:null,
   appUrlDraft:'', appUrlMsg:'',
   toastMsg:null, toastType:'success'
@@ -313,6 +313,13 @@ async function init(){
   state.items = items; state.logs = logs; state.notifications = notifications;
   state.settings = settings; state.adminUsers = adminUsers; state.loaded = true;
   checkLowStockNotifications(true); // baseline stille - ikke varsle om ting som allerede var lavt før noen åpnet siden
+
+  auth.onAuthStateChanged(user=>{
+    state.adminUnlocked = !!user;
+    state.currentUserEmail = user ? user.email : null;
+    render();
+  });
+
   render();
   startPolling();
 }
@@ -337,26 +344,54 @@ function startPolling(){
 }
 
 /* ============ credentials ============ */
+function firebaseErrorMessage(e){
+  const code = e && e.code;
+  const map = {
+    'auth/email-already-in-use': 'Denne e-posten er allerede registrert.',
+    'auth/invalid-email': 'Ugyldig e-postadresse.',
+    'auth/weak-password': 'Passordet er for svakt (minst 6 tegn).',
+    'auth/wrong-password': 'Feil e-post eller passord.',
+    'auth/user-not-found': 'Feil e-post eller passord.',
+    'auth/too-many-requests': 'For mange forsøk. Vent litt og prøv igjen.',
+    'auth/requires-recent-login': 'Du må logge inn på nytt før du kan gjøre denne endringen.'
+  };
+  return map[code] || 'Noe gikk galt. Prøv igjen.';
+}
+
 async function submitSetup(){
   const email = normEmail(state.setupEmail);
   if(!email.includes('@') || email.length < 5){ state.setupError = 'Skriv inn en gyldig e-post.'; render(); return; }
   if(state.setupPassword.length < 6){ state.setupError = 'Passordet må være minst 6 tegn.'; render(); return; }
   if(state.setupPassword !== state.setupPasswordConfirm){ state.setupError = 'Passordene er ikke like.'; render(); return; }
 
-  const salt = randomCode(16);
-  const passwordHash = await sha256Hex(salt + state.setupPassword);
-  const recoveryCode = randomCode(10);
-  const recoveryHash = await sha256Hex(salt + 'recovery:' + recoveryCode);
-  const newUser = { id: uid(), email, salt, passwordHash, recoveryHash, createdAt: new Date().toISOString() };
+  try{
+    await auth.createUserWithEmailAndPassword(email, state.setupPassword);
+    state.adminUsers = [{ email, createdAt: new Date().toISOString() }];
+    if(!state.settings) state.settings = { appUrl: '' };
+    await storageSet('adminUsers', state.adminUsers, true);
+    await storageSet('settings', state.settings, true);
+    state.setupPassword=''; state.setupPasswordConfirm=''; state.setupError='';
+    // adminUnlocked settes av onAuthStateChanged
+    render();
+  }catch(e){
+    state.setupError = firebaseErrorMessage(e);
+    render();
+  }
+}
 
-  state.adminUsers = [newUser];
-  if(!state.settings) state.settings = { appUrl: '' };
-  await storageSet('adminUsers', state.adminUsers, true);
-  await storageSet('settings', state.settings, true);
-
-  state.currentAdminId = newUser.id;
-  state.setupPassword=''; state.setupPasswordConfirm=''; state.setupError='';
-  state.justRecoveryCode = recoveryCode;
+function loginSuccess(){
+  state.loginError=''; state.loginPassword=''; state.loginFailCount=0; state.loginLockedUntil=0;
+  render();
+}
+function loginFailure(){
+  state.loginFailCount = (state.loginFailCount||0) + 1;
+  if(state.loginFailCount >= 5){
+    state.loginLockedUntil = Date.now() + 30000;
+    state.loginFailCount = 0;
+    state.loginError = 'For mange feilforsøk. Prøv igjen om litt.';
+  }else{
+    state.loginError = 'Feil e-post eller passord.';
+  }
   render();
 }
 
@@ -364,92 +399,98 @@ async function submitLogin(){
   const now = Date.now();
   if(state.loginLockedUntil && now < state.loginLockedUntil){ render(); return; }
   const email = normEmail(state.loginEmail);
-  const user = state.adminUsers.find(u=>u.email===email);
-  const attemptHash = user ? await sha256Hex(user.salt + state.loginPassword) : null;
-  if(user && attemptHash === user.passwordHash){
-    state.adminUnlocked = true; state.currentAdminId = user.id;
-    state.loginError=''; state.loginPassword=''; state.loginFailCount=0; state.loginLockedUntil=0;
-  }else{
-    state.loginFailCount = (state.loginFailCount||0) + 1;
-    if(state.loginFailCount >= 5){
-      state.loginLockedUntil = Date.now() + 30000;
-      state.loginFailCount = 0;
-      state.loginError = 'For mange feilforsøk. Prøv igjen om litt.';
-    }else{
-      state.loginError = 'Feil e-post eller passord.';
+
+  try{
+    await auth.signInWithEmailAndPassword(email, state.loginPassword);
+    loginSuccess();
+    return;
+  }catch(e){
+    if(e.code !== 'auth/user-not-found' && e.code !== 'auth/wrong-password'){
+      state.loginError = firebaseErrorMessage(e); render(); return;
     }
   }
-  render();
+
+  // ikke funnet i Firebase Auth - sjekk om det er en konto fra før denne oppgraderingen (gammelt hash-system)
+  const legacyUser = state.adminUsers.find(u => u.email===email && u.passwordHash);
+  if(legacyUser){
+    try{
+      const attemptHash = await sha256Hex(legacyUser.salt + state.loginPassword);
+      if(attemptHash === legacyUser.passwordHash){
+        // riktig gammelt passord -> opprett en ekte Firebase-konto med samme passord, sømløst, og rens opp katalogen
+        await auth.createUserWithEmailAndPassword(email, state.loginPassword);
+        delete legacyUser.salt; delete legacyUser.passwordHash; delete legacyUser.recoveryHash;
+        await storageSet('adminUsers', state.adminUsers, true);
+        loginSuccess();
+        return;
+      }
+    }catch(migrateErr){
+      state.loginError = 'Kunne ikke fullføre kontooppgradering. Prøv igjen, eller ta kontakt.';
+      render();
+      return;
+    }
+  }
+
+  loginFailure();
 }
 
-function openForgotPassword(){ state.showRecovery = true; state.recoveryError=''; state.recoveryEmail = state.loginEmail || ''; render(); }
-function cancelForgotPassword(){ state.showRecovery = false; state.recoveryEmail=''; state.recoveryCode=''; state.recoveryNewPassword=''; state.recoveryNewPasswordConfirm=''; state.recoveryError=''; render(); }
+function openForgotPassword(){ state.showRecovery = true; state.recoveryError=''; state.recoveryMsg=''; state.recoveryEmail = state.loginEmail || ''; render(); }
+function cancelForgotPassword(){ state.showRecovery = false; state.recoveryEmail=''; state.recoveryError=''; state.recoveryMsg=''; render(); }
 
 async function submitRecovery(){
   const email = normEmail(state.recoveryEmail);
-  const user = state.adminUsers.find(u=>u.email===email);
-  if(!user){ state.recoveryError = 'Fant ingen kontorsjef-konto med denne e-posten.'; render(); return; }
-  const attemptHash = await sha256Hex(user.salt + 'recovery:' + state.recoveryCode.trim().toUpperCase());
-  if(attemptHash !== user.recoveryHash){ state.recoveryError = 'Feil gjenopprettingskode.'; render(); return; }
-  if(state.recoveryNewPassword.length < 6){ state.recoveryError = 'Det nye passordet må være minst 6 tegn.'; render(); return; }
-  if(state.recoveryNewPassword !== state.recoveryNewPasswordConfirm){ state.recoveryError = 'Passordene er ikke like.'; render(); return; }
-
-  const newSalt = randomCode(16);
-  user.salt = newSalt;
-  user.passwordHash = await sha256Hex(newSalt + state.recoveryNewPassword);
-  const newRecoveryCode = randomCode(10);
-  user.recoveryHash = await sha256Hex(newSalt + 'recovery:' + newRecoveryCode);
-  await storageSet('adminUsers', state.adminUsers, true);
-
-  state.showRecovery=false; state.recoveryEmail=''; state.recoveryCode=''; state.recoveryNewPassword=''; state.recoveryNewPasswordConfirm=''; state.recoveryError='';
-  state.currentAdminId = user.id;
-  state.justRecoveryCode = newRecoveryCode;
+  if(!email.includes('@')){ state.recoveryError = 'Skriv inn en gyldig e-post.'; render(); return; }
+  try{
+    await auth.sendPasswordResetEmail(email);
+  }catch(e){
+    // sier ikke ifra om e-posten faktisk finnes eller ikke - samme melding uansett
+  }
+  state.recoveryError = '';
+  state.recoveryMsg = 'Hvis ' + email + ' har tilgang, er det nå sendt en e-post med lenke for å sette nytt passord.';
   render();
 }
 
-function acknowledgeRecoveryCode(){
-  state.justRecoveryCode = null;
-  state.adminUnlocked = true;
+async function signOutAdmin(){
+  await auth.signOut();
+  state.adminTab = 'oversikt';
   render();
 }
 
 async function saveAccountSettings(){
-  const user = state.adminUsers.find(u=>u.id===state.currentAdminId);
-  if(!user){ state.acctMsg = 'Fant ikke kontoen din. Logg inn på nytt.'; render(); return; }
-  const currentHash = await sha256Hex(user.salt + state.acctCurrentPassword);
-  if(currentHash !== user.passwordHash){ state.acctMsg = 'Feil nåværende passord.'; render(); return; }
+  const user = auth.currentUser;
+  if(!user){ state.acctMsg = 'Du er ikke lenger innlogget. Last siden på nytt.'; render(); return; }
+
+  try{
+    const cred = firebase.auth.EmailAuthProvider.credential(user.email, state.acctCurrentPassword);
+    await user.reauthenticateWithCredential(cred);
+  }catch(e){
+    state.acctMsg = 'Feil nåværende passord.'; render(); return;
+  }
 
   const newEmail = normEmail(state.acctEmail) || user.email;
   if(!newEmail.includes('@')){ state.acctMsg = 'E-posten ser ikke gyldig ut.'; render(); return; }
-  if(newEmail !== user.email && state.adminUsers.some(u=>u.id!==user.id && u.email===newEmail)){
-    state.acctMsg = 'En annen kontorsjef bruker allerede denne e-posten.'; render(); return;
-  }
-  user.email = newEmail;
 
   if(state.acctNewPassword){
     if(state.acctNewPassword.length < 6){ state.acctMsg = 'Nytt passord må være minst 6 tegn.'; render(); return; }
     if(state.acctNewPassword !== state.acctNewPasswordConfirm){ state.acctMsg = 'De nye passordene er ikke like.'; render(); return; }
-    const newSalt = randomCode(16);
-    user.salt = newSalt;
-    user.passwordHash = await sha256Hex(newSalt + state.acctNewPassword);
   }
 
-  let showNewCode = null;
-  if(state.acctRegenCode){
-    const code = randomCode(10);
-    user.recoveryHash = await sha256Hex(user.salt + 'recovery:' + code);
-    showNewCode = code;
-  }
-
-  await storageSet('adminUsers', state.adminUsers, true);
-  state.acctCurrentPassword=''; state.acctNewPassword=''; state.acctNewPasswordConfirm=''; state.acctRegenCode=false;
-  state.acctEmail = user.email;
-
-  if(showNewCode){
-    state.acctMsg='';
-    state.justRecoveryCode = showNewCode;
-  }else{
+  try{
+    const oldEmail = user.email;
+    if(newEmail !== oldEmail){
+      await user.updateEmail(newEmail);
+      const dirEntry = state.adminUsers.find(u=>u.email===oldEmail);
+      if(dirEntry) dirEntry.email = newEmail;
+      await storageSet('adminUsers', state.adminUsers, true);
+      state.currentUserEmail = newEmail;
+    }
+    if(state.acctNewPassword){
+      await user.updatePassword(state.acctNewPassword);
+    }
+    state.acctCurrentPassword=''; state.acctNewPassword=''; state.acctNewPasswordConfirm='';
+    state.acctEmail = newEmail;
     state.acctMsg = 'Lagret.';
+  }catch(e){
+    state.acctMsg = firebaseErrorMessage(e);
   }
   render();
 }
@@ -461,33 +502,35 @@ async function addAdmin(){
   if(state.newAdminPassword.length < 6){ state.newAdminMsg = 'Passordet må være minst 6 tegn.'; render(); return; }
   if(state.newAdminPassword !== state.newAdminPasswordConfirm){ state.newAdminMsg = 'Passordene er ikke like.'; render(); return; }
 
-  const salt = randomCode(16);
-  const passwordHash = await sha256Hex(salt + state.newAdminPassword);
-  const recoveryCode = randomCode(10);
-  const recoveryHash = await sha256Hex(salt + 'recovery:' + recoveryCode);
-  const newUser = { id: uid(), email, salt, passwordHash, recoveryHash, createdAt: new Date().toISOString() };
+  try{
+    // bruk en sekundær Firebase-instans, slik at vi ikke logger oss selv ut når vi oppretter en ny bruker
+    const secondaryApp = firebase.apps.find(a=>a.name==='Secondary') || firebase.initializeApp(firebaseConfig, 'Secondary');
+    const secondaryAuth = secondaryApp.auth();
+    await secondaryAuth.createUserWithEmailAndPassword(email, state.newAdminPassword);
+    await secondaryAuth.signOut();
 
-  state.adminUsers.push(newUser);
-  await storageSet('adminUsers', state.adminUsers, true);
+    state.adminUsers.push({ email, createdAt: new Date().toISOString() });
+    await storageSet('adminUsers', state.adminUsers, true);
 
-  state.newAdminEmail=''; state.newAdminPassword=''; state.newAdminPasswordConfirm=''; state.newAdminMsg='';
-  state.newAdminRecoveryCode = recoveryCode;
-  state.newAdminRecoveryEmail = email;
-  render();
+    state.newAdminEmail=''; state.newAdminPassword=''; state.newAdminPasswordConfirm=''; state.newAdminMsg='';
+    showToast('Kontorsjef lagt til.');
+  }catch(e){
+    state.newAdminMsg = firebaseErrorMessage(e);
+    render();
+  }
 }
-function dismissNewAdminCode(){ state.newAdminRecoveryCode=null; state.newAdminRecoveryEmail=''; render(); }
 
-function deleteAdmin(id){
+function deleteAdmin(email){
   if(state.adminUsers.length <= 1){
-    state.newAdminMsg = 'Du kan ikke slette den siste kontorsjefen - legg til en ny først.';
+    state.newAdminMsg = 'Du kan ikke fjerne den siste kontorsjefen fra lista.';
     state.confirmDeleteAdminId = null;
     render();
     return;
   }
-  state.adminUsers = state.adminUsers.filter(u=>u.id!==id);
+  state.adminUsers = state.adminUsers.filter(u=>u.email!==email);
   state.confirmDeleteAdminId = null;
   storageSet('adminUsers', state.adminUsers, true);
-  showToast('Kontorsjef fjernet.', 'danger');
+  showToast('Fjernet fra lista.', 'danger');
 }
 
 async function saveAppUrl(){
@@ -707,29 +750,13 @@ function renderRecoveryForm(){
   return `<div class="wrap">
     <div class="gatecard" style="max-width:380px;">
       <h2>Glemt passord</h2>
-      <p>Skriv inn e-posten din og gjenopprettingskoden du fikk da tilgangen ble satt opp (eller sist byttet), og velg et nytt passord.</p>
+      <p>Skriv inn e-posten din, så sender vi en lenke dit hvor du kan sette et nytt passord.</p>
       ${state.recoveryError?`<div class="errmsg">${esc(state.recoveryError)}</div>`:''}
+      ${state.recoveryMsg?`<p style="color:var(--muted); font-size:13px; margin-bottom:14px;">${esc(state.recoveryMsg)}</p>`:''}
       <input class="nameinput" type="email" placeholder="E-post" value="${esc(state.recoveryEmail)}"
-        data-focus-id="recoveryEmail" oninput="state.recoveryEmail=this.value;" />
-      <input class="pininput" style="letter-spacing:2px; font-size:18px;" type="text" placeholder="GJENOPPRETTINGSKODE" value="${esc(state.recoveryCode)}"
-        data-focus-id="recoveryCode" oninput="state.recoveryCode=this.value;" />
-      <input class="nameinput" type="password" placeholder="Nytt passord (minst 6 tegn)" value="${esc(state.recoveryNewPassword)}"
-        data-focus-id="recoveryNewPassword" oninput="state.recoveryNewPassword=this.value;" />
-      <input class="nameinput" type="password" placeholder="Bekreft nytt passord" value="${esc(state.recoveryNewPasswordConfirm)}"
-        data-focus-id="recoveryNewPasswordConfirm" oninput="state.recoveryNewPasswordConfirm=this.value;" onkeydown="if(event.key==='Enter') submitRecovery();" />
-      <button class="primarybtn" onclick="submitRecovery()">Sett nytt passord</button>
-      <p style="margin-top:14px;"><button class="ghostbtn" onclick="cancelForgotPassword()">Avbryt</button></p>
-    </div>
-  </div>`;
-}
-
-function renderRecoveryCodeDisplay(){
-  return `<div class="wrap">
-    <div class="gatecard" style="max-width:420px;">
-      <h2>Lagre denne koden</h2>
-      <p>Dette er gjenopprettingskoden din. Den vises bare denne ene gangen - skriv den ned og oppbevar den trygt. Den lar deg sette nytt passord hvis du glemmer det.</p>
-      <div class="num" style="font-size:26px; letter-spacing:3px; background:var(--paper); border:1.5px solid var(--line); border-radius:3px; padding:16px; text-align:center; margin:16px 0;">${esc(state.justRecoveryCode)}</div>
-      <button class="primarybtn" onclick="acknowledgeRecoveryCode()">Jeg har lagret koden</button>
+        data-focus-id="recoveryEmail" oninput="state.recoveryEmail=this.value;" onkeydown="if(event.key==='Enter') submitRecovery();" />
+      <button class="primarybtn" onclick="submitRecovery()">Send lenke</button>
+      <p style="margin-top:14px;"><button class="ghostbtn" onclick="cancelForgotPassword()">Tilbake til innlogging</button></p>
     </div>
   </div>`;
 }
@@ -985,7 +1012,7 @@ function renderLogg(){
 
 function renderInnstillinger(){
   const s = state.settings;
-  const me = state.adminUsers.find(u=>u.id===state.currentAdminId) || {};
+  const me = auth.currentUser || {};
   return `
     <h1>Innstillinger</h1>
     <h3 style="font-size:16px; margin-bottom:10px;">Din konto</h3>
@@ -996,52 +1023,43 @@ function renderInnstillinger(){
       <div class="formfield"><label>Nytt passord (valgfritt)</label><input type="password" value="${esc(state.acctNewPassword)}" oninput="state.acctNewPassword=this.value;" placeholder="La stå tomt for å beholde" /></div>
       <div class="formfield"><label>Bekreft nytt passord</label><input type="password" value="${esc(state.acctNewPasswordConfirm)}" oninput="state.acctNewPasswordConfirm=this.value;" /></div>
     </div>
-    <label style="display:flex; align-items:center; gap:8px; font-size:13px; margin-top:14px; cursor:pointer;">
-      <input type="checkbox" ${state.acctRegenCode?'checked':''} onchange="state.acctRegenCode=this.checked;" />
-      Lag ny gjenopprettingskode (ugyldiggjør den gamle)
-    </label>
     ${state.acctMsg?`<p style="font-size:13px; color:${state.acctMsg==='Lagret.'?'var(--muted)':'var(--danger)'}; margin-top:8px;">${esc(state.acctMsg)}</p>`:''}
-    <div class="savebar"><button class="secondarybtn" onclick="saveAccountSettings()">Lagre</button></div>
+    <div class="savebar" style="display:flex; gap:10px; align-items:center;">
+      <button class="secondarybtn" onclick="saveAccountSettings()">Lagre</button>
+      <button class="ghostbtn" onclick="signOutAdmin()">Logg ut</button>
+    </div>
 
     <h3 style="font-size:16px; margin:30px 0 10px;">Kontorsjefer</h3>
     <p style="color:var(--muted); font-size:13px; margin-bottom:12px;">Alle som kan logge inn på denne siden. Legg til nye, eller fjern noen som har sluttet.</p>
-    <table style="max-width:560px; margin-bottom:16px;">
+    <table style="max-width:560px; margin-bottom:8px;">
       <thead><tr><th>E-post</th><th></th></tr></thead>
       <tbody>
         ${state.adminUsers.map(u=>{
-          if(state.confirmDeleteAdminId === u.id){
+          if(state.confirmDeleteAdminId === u.email){
             return `<tr><td colspan="2">
               <div class="confirmrow">
-                Fjerne «${esc(u.email)}» som kontorsjef?
-                <button class="smallbtn" onclick="deleteAdmin('${u.id}')">Ja, fjern</button>
+                Fjerne «${esc(u.email)}» fra lista?
+                <button class="smallbtn" onclick="deleteAdmin(${jsStr(u.email)})">Ja, fjern</button>
                 <button class="smallbtn" onclick="state.confirmDeleteAdminId=null; render();">Avbryt</button>
               </div>
             </td></tr>`;
           }
           return `<tr>
-            <td>${esc(u.email)}${u.id===state.currentAdminId?' <span style="color:var(--muted); font-size:12px;">(deg)</span>':''}</td>
-            <td><button class="smallbtn" onclick="state.confirmDeleteAdminId='${u.id}'; render();">Slett</button></td>
+            <td>${esc(u.email)}${u.email===me.email?' <span style="color:var(--muted); font-size:12px;">(deg)</span>':''}</td>
+            <td><button class="smallbtn" onclick="state.confirmDeleteAdminId=${jsStr(u.email)}; render();">Slett</button></td>
           </tr>`;
         }).join('')}
       </tbody>
     </table>
+    <p style="color:var(--muted); font-size:12px; margin-bottom:16px;">«Slett» fjerner personen fra denne lista. For å faktisk sperre innloggingen deres helt, må du også slette brukeren under <a href="https://console.firebase.google.com/project/${esc(firebaseConfig.projectId)}/authentication/users" target="_blank" rel="noopener" style="color:var(--ink);">Firebase Console → Authentication</a>.</p>
 
-    ${state.newAdminRecoveryCode ? `
-      <div class="noteband" style="border-color:var(--accent);">
-        <strong>Gjenopprettingskode for ${esc(state.newAdminRecoveryEmail)}:</strong>
-        <div class="num" style="font-size:20px; letter-spacing:2px; margin:8px 0;">${esc(state.newAdminRecoveryCode)}</div>
-        Gi denne koden videre til vedkommende sammen med passordet du valgte - den lar dem sette nytt passord hvis de glemmer det. Vises kun denne ene gangen.
-        <div style="margin-top:8px;"><button class="smallbtn" onclick="dismissNewAdminCode()">Jeg har notert koden</button></div>
-      </div>
-    ` : `
-      <div class="formgrid">
-        <div class="formfield"><label>Ny kontorsjef - e-post</label><input type="email" value="${esc(state.newAdminEmail)}" oninput="state.newAdminEmail=this.value;" /></div>
-        <div class="formfield"><label>Passord (minst 6 tegn)</label><input type="password" value="${esc(state.newAdminPassword)}" oninput="state.newAdminPassword=this.value;" /></div>
-        <div class="formfield"><label>Bekreft passord</label><input type="password" value="${esc(state.newAdminPasswordConfirm)}" oninput="state.newAdminPasswordConfirm=this.value;" /></div>
-      </div>
-      ${state.newAdminMsg?`<p style="font-size:13px; color:var(--danger); margin-top:8px;">${esc(state.newAdminMsg)}</p>`:''}
-      <div class="savebar"><button class="secondarybtn" onclick="addAdmin()">Legg til kontorsjef</button></div>
-    `}
+    <div class="formgrid">
+      <div class="formfield"><label>Ny kontorsjef - e-post</label><input type="email" value="${esc(state.newAdminEmail)}" oninput="state.newAdminEmail=this.value;" /></div>
+      <div class="formfield"><label>Passord (minst 6 tegn)</label><input type="password" value="${esc(state.newAdminPassword)}" oninput="state.newAdminPassword=this.value;" /></div>
+      <div class="formfield"><label>Bekreft passord</label><input type="password" value="${esc(state.newAdminPasswordConfirm)}" oninput="state.newAdminPasswordConfirm=this.value;" /></div>
+    </div>
+    ${state.newAdminMsg?`<p style="font-size:13px; color:var(--danger); margin-top:8px;">${esc(state.newAdminMsg)}</p>`:''}
+    <div class="savebar"><button class="secondarybtn" onclick="addAdmin()">Legg til kontorsjef</button></div>
 
     <h3 style="font-size:16px; margin:30px 0 10px;">Ansatt-appens lenke</h3>
     <p style="color:var(--muted); font-size:13px; margin-bottom:10px;">Brukes til å generere QR-kodene under «QR-koder». Fylles inn når appen er laget - la stå tom inntil videre.</p>
@@ -1109,7 +1127,6 @@ function render(){
 
   let body;
   if(state.adminUsers.length === 0) body = renderAdminSetup();
-  else if(state.justRecoveryCode) body = renderRecoveryCodeDisplay();
   else if(!state.adminUnlocked) body = state.showRecovery ? renderRecoveryForm() : renderAdminLogin();
   else body = renderDashboard();
 
