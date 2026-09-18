@@ -314,9 +314,17 @@ async function init(){
   state.settings = settings; state.adminUsers = adminUsers; state.loaded = true;
   checkLowStockNotifications(true); // baseline stille - ikke varsle om ting som allerede var lavt før noen åpnet siden
 
-  auth.onAuthStateChanged(user=>{
+  auth.onAuthStateChanged(async user=>{
     state.adminUnlocked = !!user;
     state.currentUserEmail = user ? user.email : null;
+    if(user){
+      // hent settings/adminUsers på nytt nå som vi er ekte innlogget, i tilfelle den aller første innlastingen
+      // (før innlogging var bekreftet) ikke fikk lov til å lese dem under de nye reglene
+      const freshSettings = await storageGet('settings', true);
+      if(freshSettings) state.settings = freshSettings;
+      const freshAdminUsers = await storageGet('adminUsers', true);
+      if(freshAdminUsers) state.adminUsers = freshAdminUsers;
+    }
     render();
   });
 
