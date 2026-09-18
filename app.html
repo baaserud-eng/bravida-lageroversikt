@@ -339,6 +339,7 @@ async function logWithdrawal(itemId, qty, employee, aoNummer){
     id: uid(), itemId, itemName: item.name, qty,
     employee: (employee||'').trim() || 'Ukjent',
     aoNummer: (aoNummer||'').trim(),
+    pris: (typeof item.pris === 'number' ? item.pris : 0),
     remainingAfter: item.qty,
     ts: new Date().toISOString()
   };
