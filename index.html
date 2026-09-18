@@ -202,6 +202,7 @@ let state = {
   confirmDeleteId:null,
   confirmReset:false,
   logSearch:'',
+  selectedAo:null,
   oversiktSearch:'',
   newItem:{ name:'', produktnummer:'', category:CATEGORIES[0], qty:0, unit:'stk', minStock:0, pris:0 },
   newItemError:'',
@@ -473,6 +474,9 @@ function fmtKr(n){
   const num = Number(n)||0;
   return num.toLocaleString('nb-NO', {minimumFractionDigits:0, maximumFractionDigits:2}) + ' kr';
 }
+function jsStr(s){
+  return "'" + String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\n/g,'\\n') + "'";
+}
 function shelfUrl(itemId){
   const base = (state.settings && state.settings.appUrl) ? state.settings.appUrl.trim() : '';
   return base ? (base + '#item=' + itemId) : '';
@@ -667,7 +671,7 @@ function renderAdminNav(){
       const badge = (k==='varslinger' && unseenCount>0) ? `<span class="navbadge">${unseenCount}</span>` : '';
       const onclick = (k==='varslinger')
         ? `state.adminTab='varslinger'; markNotificationsSeen(); render();`
-        : `state.adminTab='${k}'; render();`;
+        : `state.adminTab='${k}'; state.selectedAo=null; render();`;
       return `<button class="${state.adminTab===k?'active':''}" onclick="${onclick}">${l}${badge}</button>`;
     }).join('')}
   </div>`;
@@ -815,7 +819,50 @@ function renderQr(){
   `;
 }
 
+function renderAoKvittering(aoNummer){
+  const entries = state.logs
+    .filter(l => ((l.aoNummer && l.aoNummer.trim()) ? l.aoNummer.trim() : 'Ikke oppgitt') === aoNummer)
+    .sort((a,b)=> a.ts.localeCompare(b.ts));
+  const total = entries.reduce((sum,l)=> sum + (Number(l.pris)||0) * (Number(l.qty)||0), 0);
+
+  const rows = entries.map(l=>{
+    const unitPris = Number(l.pris)||0;
+    const lineTotal = unitPris * (Number(l.qty)||0);
+    return `<tr>
+      <td>${fmtDate(l.ts)}</td>
+      <td>${esc(l.itemName)}</td>
+      <td>${esc(l.employee)}</td>
+      <td class="num">${l.qty}</td>
+      <td class="num">${fmtKr(unitPris)}</td>
+      <td class="num">${fmtKr(lineTotal)}</td>
+    </tr>`;
+  }).join('');
+
+  return `
+    <button class="ghostbtn noprint" style="margin-bottom:18px;" onclick="state.selectedAo=null; render();">&larr; Tilbake til AO-oversikt</button>
+    <div class="noprint" style="margin-bottom:18px;">
+      <button class="secondarybtn" onclick="window.print()">🖨️ Skriv ut kvittering</button>
+    </div>
+    <h1>Kvittering - AO ${esc(aoNummer)}</h1>
+    <p style="color:var(--muted); font-size:13px; margin-bottom:20px;">Bravida Lager</p>
+    <table>
+      <thead><tr><th>Tidspunkt</th><th>Vare</th><th>Ansatt</th><th>Antall</th><th>Pris/enhet</th><th>Sum</th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="6" style="color:var(--muted); padding:20px;">Ingen uttak funnet.</td></tr>'}</tbody>
+      <tfoot>
+        <tr style="font-weight:700; border-top:2px solid var(--ink);">
+          <td colspan="5" style="text-align:right; padding-top:12px;">Totalt:</td>
+          <td class="num" style="padding-top:12px;">${fmtKr(total)}</td>
+        </tr>
+      </tfoot>
+    </table>
+  `;
+}
+
 function renderLogg(){
+  if(state.selectedAo !== null){
+    return renderAoKvittering(state.selectedAo);
+  }
+
   const q = (state.logSearch || '').toLowerCase();
 
   const byAo = {};
@@ -831,7 +878,9 @@ function renderLogg(){
     .filter(([ao]) => !q || ao.toLowerCase().includes(q))
     .sort((a,b)=> b[1].totalQty - a[1].totalQty)
     .map(([ao, s])=>`
-      <tr><td>${esc(ao)}</td><td class="num">${s.totalQty}</td><td class="num">${s.count}</td><td class="num">${fmtKr(s.totalCost)}</td><td>${fmtDate(s.last)}</td></tr>
+      <tr style="cursor:pointer;" onclick="state.selectedAo=${jsStr(ao)}; render();">
+        <td>${esc(ao)}</td><td class="num">${s.totalQty}</td><td class="num">${s.count}</td><td class="num">${fmtKr(s.totalCost)}</td><td>${fmtDate(s.last)}</td>
+      </tr>
     `).join('');
 
   const hasAnyAo = state.logs.some(l=>l.aoNummer && l.aoNummer.trim());
@@ -847,6 +896,7 @@ function renderLogg(){
     ${!hasAnyAo ? `<div class="noteband">AO-nummer vises her så snart ansatte begynner å oppgi det per uttak.</div>` : ''}
 
     <h3 style="font-size:16px; margin-bottom:10px;">Oversikt per AO-nummer</h3>
+    <p style="color:var(--muted); font-size:12.5px; margin:-4px 0 12px;">Trykk på en rad for å se og skrive ut kvittering for den jobben.</p>
     <table>
       <thead><tr><th>AO-nummer</th><th>Antall tatt ut totalt</th><th>Antall uttak</th><th>Totalt kostnad</th><th>Siste uttak</th></tr></thead>
       <tbody>${aoSummaryRows || `<tr><td colspan="5" style="color:var(--muted); padding:20px;">${state.logs.length ? 'Ingen AO-numre matcher søket.' : 'Ingen uttak logget ennå.'}</td></tr>`}</tbody>
