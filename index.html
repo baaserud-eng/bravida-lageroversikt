@@ -503,6 +503,7 @@ function exportLoggToExcel(){
     'Antall': l.qty,
     'Ansatt': l.employee,
     'AO-nummer': l.aoNummer || '',
+    'Kostnad': (Number(l.pris)||0) * (Number(l.qty)||0),
     'Igjen etter uttak': typeof l.remainingAfter === 'number' ? l.remainingAfter : ''
   }));
   const ws = XLSX.utils.json_to_sheet(rows);
@@ -837,26 +838,33 @@ function renderLogg(){
   const byAo = {};
   state.logs.forEach(l=>{
     const key = (l.aoNummer && l.aoNummer.trim()) ? l.aoNummer.trim() : 'Ikke oppgitt';
-    if(!byAo[key]) byAo[key] = { totalQty:0, count:0, last:l.ts };
+    if(!byAo[key]) byAo[key] = { totalQty:0, count:0, last:l.ts, totalCost:0 };
     byAo[key].totalQty += l.qty;
     byAo[key].count += 1;
+    byAo[key].totalCost += (Number(l.pris)||0) * (Number(l.qty)||0);
     if(l.ts > byAo[key].last) byAo[key].last = l.ts;
   });
   const aoSummaryRows = Object.entries(byAo)
     .sort((a,b)=> b[1].totalQty - a[1].totalQty)
     .map(([ao, s])=>`
-      <tr><td>${esc(ao)}</td><td class="num">${s.totalQty}</td><td class="num">${s.count}</td><td>${fmtDate(s.last)}</td></tr>
+      <tr><td>${esc(ao)}</td><td class="num">${s.totalQty}</td><td class="num">${s.count}</td><td class="num">${fmtKr(s.totalCost)}</td><td>${fmtDate(s.last)}</td></tr>
     `).join('');
 
   const hasAnyAo = state.logs.some(l=>l.aoNummer && l.aoNummer.trim());
 
   const logRows = filtered.map(l=>`
-    <tr><td>${fmtDate(l.ts)}</td><td>${esc(l.itemName)}</td><td class="num">${l.qty}</td><td>${esc(l.employee)}</td><td>${esc(l.aoNummer || '–')}</td><td class="num">${typeof l.remainingAfter==='number' ? l.remainingAfter : '–'}</td></tr>
+    <tr><td>${fmtDate(l.ts)}</td><td>${esc(l.itemName)}</td><td class="num">${l.qty}</td><td>${esc(l.employee)}</td><td>${esc(l.aoNummer || '–')}</td><td class="num">${fmtKr((Number(l.pris)||0)*(Number(l.qty)||0))}</td><td class="num">${typeof l.remainingAfter==='number' ? l.remainingAfter : '–'}</td></tr>
   `).join('');
 
   return `
     <h1>Uttakslogg</h1>
-    ${!hasAnyAo ? `<div class="noteband">AO-nummer vises her så snart ansatt-appen (neste steg) begynner å samle det inn per uttak.</div>` : ''}
+    <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:18px;">
+      <input type="text" placeholder="Søk på ansatt, vare eller AO-nummer..." value="${esc(state.logSearch||'')}" data-focus-id="logSearch"
+        style="flex:1; min-width:200px; max-width:320px; padding:9px 12px; border:1.5px solid var(--line); border-radius:3px; font-size:14px;"
+        oninput="state.logSearch=this.value; render();" />
+      <button class="secondarybtn" onclick="exportLoggToExcel()">📥 Eksporter til Excel</button>
+    </div>
+    ${!hasAnyAo ? `<div class="noteband">AO-nummer vises her så snart ansatte begynner å oppgi det per uttak.</div>` : ''}
 
     <h3 style="font-size:16px; margin-bottom:10px;">Oversikt per ansatt</h3>
     <table style="margin-bottom:30px;">
@@ -866,20 +874,14 @@ function renderLogg(){
 
     <h3 style="font-size:16px; margin-bottom:10px;">Oversikt per AO-nummer</h3>
     <table style="margin-bottom:30px;">
-      <thead><tr><th>AO-nummer</th><th>Antall tatt ut totalt</th><th>Antall uttak</th><th>Siste uttak</th></tr></thead>
-      <tbody>${aoSummaryRows || '<tr><td colspan="4" style="color:var(--muted); padding:20px;">Ingen uttak logget ennå.</td></tr>'}</tbody>
+      <thead><tr><th>AO-nummer</th><th>Antall tatt ut totalt</th><th>Antall uttak</th><th>Totalt kostnad</th><th>Siste uttak</th></tr></thead>
+      <tbody>${aoSummaryRows || '<tr><td colspan="5" style="color:var(--muted); padding:20px;">Ingen uttak logget ennå.</td></tr>'}</tbody>
     </table>
 
     <h3 style="font-size:16px; margin-bottom:10px;">Alle uttak</h3>
-    <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
-      <input type="text" placeholder="Søk på ansatt, vare eller AO-nummer..." value="${esc(state.logSearch||'')}" data-focus-id="logSearch"
-        style="flex:1; min-width:200px; max-width:320px; padding:9px 12px; border:1.5px solid var(--line); border-radius:3px; font-size:14px;"
-        oninput="state.logSearch=this.value; render();" />
-      <button class="secondarybtn" onclick="exportLoggToExcel()">📥 Eksporter til Excel</button>
-    </div>
     <table>
-      <thead><tr><th>Tidspunkt</th><th>Vare</th><th>Antall</th><th>Ansatt</th><th>AO-nummer</th><th>Igjen etter uttak</th></tr></thead>
-      <tbody>${logRows || '<tr><td colspan="6" style="color:var(--muted); padding:20px;">Ingen treff.</td></tr>'}</tbody>
+      <thead><tr><th>Tidspunkt</th><th>Vare</th><th>Antall</th><th>Ansatt</th><th>AO-nummer</th><th>Kostnad</th><th>Igjen etter uttak</th></tr></thead>
+      <tbody>${logRows || '<tr><td colspan="7" style="color:var(--muted); padding:20px;">Ingen treff.</td></tr>'}</tbody>
     </table>
   `;
 }
