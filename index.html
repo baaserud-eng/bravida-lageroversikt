@@ -190,11 +190,13 @@ let state = {
   items:[],
   logs:[],
   notifications:[],
-  settings:null, // null = kontorsjef-tilgang er ikke satt opp ennå
+  settings:null, // holder bare appUrl osv. - selve brukerne bor i adminUsers
+  adminUsers:[], // liste over kontorsjefer: {id, email, salt, passwordHash, recoveryHash, createdAt}
+  currentAdminId:null,
   adminUnlocked:false,
   setupEmail:'', setupPassword:'', setupPasswordConfirm:'', setupError:'',
   loginEmail:'', loginPassword:'', loginError:'', loginFailCount:0, loginLockedUntil:0,
-  showRecovery:false, recoveryCode:'', recoveryNewPassword:'', recoveryNewPasswordConfirm:'', recoveryError:'',
+  showRecovery:false, recoveryEmail:'', recoveryCode:'', recoveryNewPassword:'', recoveryNewPasswordConfirm:'', recoveryError:'',
   justRecoveryCode:null,
   adminTab:'oversikt',
   editingId:null,
@@ -207,6 +209,9 @@ let state = {
   newItem:{ name:'', produktnummer:'', category:CATEGORIES[0], qty:0, unit:'stk', minStock:0, pris:0 },
   newItemError:'',
   acctEmail:'', acctCurrentPassword:'', acctNewPassword:'', acctNewPasswordConfirm:'', acctRegenCode:false, acctMsg:'',
+  newAdminEmail:'', newAdminPassword:'', newAdminPasswordConfirm:'', newAdminMsg:'',
+  newAdminRecoveryCode:null, newAdminRecoveryEmail:'',
+  confirmDeleteAdminId:null,
   appUrlDraft:'', appUrlMsg:'',
   toastMsg:null, toastType:'success'
 };
@@ -281,9 +286,32 @@ async function init(){
   if(!logs){ logs = []; await storageSet('logs', logs, true); }
   let notifications = await storageGet('notifications', true);
   if(!notifications){ notifications = []; }
-  let settings = await storageGet('settings', true); // null = ikke satt opp ennå
 
-  state.items = items; state.logs = logs; state.notifications = notifications; state.settings = settings; state.loaded = true;
+  let settings = await storageGet('settings', true);
+  let adminUsers = await storageGet('adminUsers', true);
+
+  if(!adminUsers){
+    if(settings && settings.passwordHash){
+      // migrer den gamle én-konto-modellen inn i den nye kontorsjef-lista, slik at eksisterende innlogging fortsetter å virke
+      adminUsers = [{
+        id: uid(),
+        email: settings.email,
+        salt: settings.salt,
+        passwordHash: settings.passwordHash,
+        recoveryHash: settings.recoveryHash,
+        createdAt: new Date().toISOString()
+      }];
+      settings = { appUrl: settings.appUrl || '' };
+      await storageSet('adminUsers', adminUsers, true);
+      await storageSet('settings', settings, true);
+    }else{
+      adminUsers = [];
+    }
+  }
+  if(!settings) settings = { appUrl: '' };
+
+  state.items = items; state.logs = logs; state.notifications = notifications;
+  state.settings = settings; state.adminUsers = adminUsers; state.loaded = true;
   checkLowStockNotifications(true); // baseline stille - ikke varsle om ting som allerede var lavt før noen åpnet siden
   render();
   startPolling();
@@ -319,10 +347,14 @@ async function submitSetup(){
   const passwordHash = await sha256Hex(salt + state.setupPassword);
   const recoveryCode = randomCode(10);
   const recoveryHash = await sha256Hex(salt + 'recovery:' + recoveryCode);
+  const newUser = { id: uid(), email, salt, passwordHash, recoveryHash, createdAt: new Date().toISOString() };
 
-  state.settings = { email, salt, passwordHash, recoveryHash, appUrl:'' };
+  state.adminUsers = [newUser];
+  if(!state.settings) state.settings = { appUrl: '' };
+  await storageSet('adminUsers', state.adminUsers, true);
   await storageSet('settings', state.settings, true);
 
+  state.currentAdminId = newUser.id;
   state.setupPassword=''; state.setupPasswordConfirm=''; state.setupError='';
   state.justRecoveryCode = recoveryCode;
   render();
@@ -331,10 +363,12 @@ async function submitSetup(){
 async function submitLogin(){
   const now = Date.now();
   if(state.loginLockedUntil && now < state.loginLockedUntil){ render(); return; }
-  const s = state.settings;
-  const attemptHash = await sha256Hex(s.salt + state.loginPassword);
-  if(normEmail(state.loginEmail) === s.email && attemptHash === s.passwordHash){
-    state.adminUnlocked = true; state.loginError=''; state.loginPassword=''; state.loginFailCount=0; state.loginLockedUntil=0;
+  const email = normEmail(state.loginEmail);
+  const user = state.adminUsers.find(u=>u.email===email);
+  const attemptHash = user ? await sha256Hex(user.salt + state.loginPassword) : null;
+  if(user && attemptHash === user.passwordHash){
+    state.adminUnlocked = true; state.currentAdminId = user.id;
+    state.loginError=''; state.loginPassword=''; state.loginFailCount=0; state.loginLockedUntil=0;
   }else{
     state.loginFailCount = (state.loginFailCount||0) + 1;
     if(state.loginFailCount >= 5){
@@ -348,24 +382,27 @@ async function submitLogin(){
   render();
 }
 
-function openForgotPassword(){ state.showRecovery = true; state.recoveryError=''; render(); }
-function cancelForgotPassword(){ state.showRecovery = false; state.recoveryCode=''; state.recoveryNewPassword=''; state.recoveryNewPasswordConfirm=''; state.recoveryError=''; render(); }
+function openForgotPassword(){ state.showRecovery = true; state.recoveryError=''; state.recoveryEmail = state.loginEmail || ''; render(); }
+function cancelForgotPassword(){ state.showRecovery = false; state.recoveryEmail=''; state.recoveryCode=''; state.recoveryNewPassword=''; state.recoveryNewPasswordConfirm=''; state.recoveryError=''; render(); }
 
 async function submitRecovery(){
-  const s = state.settings;
-  const attemptHash = await sha256Hex(s.salt + 'recovery:' + state.recoveryCode.trim().toUpperCase());
-  if(attemptHash !== s.recoveryHash){ state.recoveryError = 'Feil gjenopprettingskode.'; render(); return; }
+  const email = normEmail(state.recoveryEmail);
+  const user = state.adminUsers.find(u=>u.email===email);
+  if(!user){ state.recoveryError = 'Fant ingen kontorsjef-konto med denne e-posten.'; render(); return; }
+  const attemptHash = await sha256Hex(user.salt + 'recovery:' + state.recoveryCode.trim().toUpperCase());
+  if(attemptHash !== user.recoveryHash){ state.recoveryError = 'Feil gjenopprettingskode.'; render(); return; }
   if(state.recoveryNewPassword.length < 6){ state.recoveryError = 'Det nye passordet må være minst 6 tegn.'; render(); return; }
   if(state.recoveryNewPassword !== state.recoveryNewPasswordConfirm){ state.recoveryError = 'Passordene er ikke like.'; render(); return; }
 
   const newSalt = randomCode(16);
-  s.salt = newSalt;
-  s.passwordHash = await sha256Hex(newSalt + state.recoveryNewPassword);
+  user.salt = newSalt;
+  user.passwordHash = await sha256Hex(newSalt + state.recoveryNewPassword);
   const newRecoveryCode = randomCode(10);
-  s.recoveryHash = await sha256Hex(newSalt + 'recovery:' + newRecoveryCode);
-  await storageSet('settings', s, true);
+  user.recoveryHash = await sha256Hex(newSalt + 'recovery:' + newRecoveryCode);
+  await storageSet('adminUsers', state.adminUsers, true);
 
-  state.showRecovery=false; state.recoveryCode=''; state.recoveryNewPassword=''; state.recoveryNewPasswordConfirm=''; state.recoveryError='';
+  state.showRecovery=false; state.recoveryEmail=''; state.recoveryCode=''; state.recoveryNewPassword=''; state.recoveryNewPasswordConfirm=''; state.recoveryError='';
+  state.currentAdminId = user.id;
   state.justRecoveryCode = newRecoveryCode;
   render();
 }
@@ -377,32 +414,36 @@ function acknowledgeRecoveryCode(){
 }
 
 async function saveAccountSettings(){
-  const s = state.settings;
-  const currentHash = await sha256Hex(s.salt + state.acctCurrentPassword);
-  if(currentHash !== s.passwordHash){ state.acctMsg = 'Feil nåværende passord.'; render(); return; }
+  const user = state.adminUsers.find(u=>u.id===state.currentAdminId);
+  if(!user){ state.acctMsg = 'Fant ikke kontoen din. Logg inn på nytt.'; render(); return; }
+  const currentHash = await sha256Hex(user.salt + state.acctCurrentPassword);
+  if(currentHash !== user.passwordHash){ state.acctMsg = 'Feil nåværende passord.'; render(); return; }
 
-  const newEmail = normEmail(state.acctEmail) || s.email;
+  const newEmail = normEmail(state.acctEmail) || user.email;
   if(!newEmail.includes('@')){ state.acctMsg = 'E-posten ser ikke gyldig ut.'; render(); return; }
-  s.email = newEmail;
+  if(newEmail !== user.email && state.adminUsers.some(u=>u.id!==user.id && u.email===newEmail)){
+    state.acctMsg = 'En annen kontorsjef bruker allerede denne e-posten.'; render(); return;
+  }
+  user.email = newEmail;
 
   if(state.acctNewPassword){
     if(state.acctNewPassword.length < 6){ state.acctMsg = 'Nytt passord må være minst 6 tegn.'; render(); return; }
     if(state.acctNewPassword !== state.acctNewPasswordConfirm){ state.acctMsg = 'De nye passordene er ikke like.'; render(); return; }
     const newSalt = randomCode(16);
-    s.salt = newSalt;
-    s.passwordHash = await sha256Hex(newSalt + state.acctNewPassword);
+    user.salt = newSalt;
+    user.passwordHash = await sha256Hex(newSalt + state.acctNewPassword);
   }
 
   let showNewCode = null;
   if(state.acctRegenCode){
     const code = randomCode(10);
-    s.recoveryHash = await sha256Hex(s.salt + 'recovery:' + code);
+    user.recoveryHash = await sha256Hex(user.salt + 'recovery:' + code);
     showNewCode = code;
   }
 
-  await storageSet('settings', s, true);
+  await storageSet('adminUsers', state.adminUsers, true);
   state.acctCurrentPassword=''; state.acctNewPassword=''; state.acctNewPasswordConfirm=''; state.acctRegenCode=false;
-  state.acctEmail = s.email;
+  state.acctEmail = user.email;
 
   if(showNewCode){
     state.acctMsg='';
@@ -411,6 +452,42 @@ async function saveAccountSettings(){
     state.acctMsg = 'Lagret.';
   }
   render();
+}
+
+async function addAdmin(){
+  const email = normEmail(state.newAdminEmail);
+  if(!email.includes('@') || email.length < 5){ state.newAdminMsg = 'Skriv inn en gyldig e-post.'; render(); return; }
+  if(state.adminUsers.some(u=>u.email===email)){ state.newAdminMsg = 'Denne e-posten er allerede en kontorsjef.'; render(); return; }
+  if(state.newAdminPassword.length < 6){ state.newAdminMsg = 'Passordet må være minst 6 tegn.'; render(); return; }
+  if(state.newAdminPassword !== state.newAdminPasswordConfirm){ state.newAdminMsg = 'Passordene er ikke like.'; render(); return; }
+
+  const salt = randomCode(16);
+  const passwordHash = await sha256Hex(salt + state.newAdminPassword);
+  const recoveryCode = randomCode(10);
+  const recoveryHash = await sha256Hex(salt + 'recovery:' + recoveryCode);
+  const newUser = { id: uid(), email, salt, passwordHash, recoveryHash, createdAt: new Date().toISOString() };
+
+  state.adminUsers.push(newUser);
+  await storageSet('adminUsers', state.adminUsers, true);
+
+  state.newAdminEmail=''; state.newAdminPassword=''; state.newAdminPasswordConfirm=''; state.newAdminMsg='';
+  state.newAdminRecoveryCode = recoveryCode;
+  state.newAdminRecoveryEmail = email;
+  render();
+}
+function dismissNewAdminCode(){ state.newAdminRecoveryCode=null; state.newAdminRecoveryEmail=''; render(); }
+
+function deleteAdmin(id){
+  if(state.adminUsers.length <= 1){
+    state.newAdminMsg = 'Du kan ikke slette den siste kontorsjefen - legg til en ny først.';
+    state.confirmDeleteAdminId = null;
+    render();
+    return;
+  }
+  state.adminUsers = state.adminUsers.filter(u=>u.id!==id);
+  state.confirmDeleteAdminId = null;
+  storageSet('adminUsers', state.adminUsers, true);
+  showToast('Kontorsjef fjernet.', 'danger');
 }
 
 async function saveAppUrl(){
@@ -630,8 +707,10 @@ function renderRecoveryForm(){
   return `<div class="wrap">
     <div class="gatecard" style="max-width:380px;">
       <h2>Glemt passord</h2>
-      <p>Skriv inn gjenopprettingskoden du fikk da tilgangen ble satt opp (eller sist byttet), og velg et nytt passord.</p>
+      <p>Skriv inn e-posten din og gjenopprettingskoden du fikk da tilgangen ble satt opp (eller sist byttet), og velg et nytt passord.</p>
       ${state.recoveryError?`<div class="errmsg">${esc(state.recoveryError)}</div>`:''}
+      <input class="nameinput" type="email" placeholder="E-post" value="${esc(state.recoveryEmail)}"
+        data-focus-id="recoveryEmail" oninput="state.recoveryEmail=this.value;" />
       <input class="pininput" style="letter-spacing:2px; font-size:18px;" type="text" placeholder="GJENOPPRETTINGSKODE" value="${esc(state.recoveryCode)}"
         data-focus-id="recoveryCode" oninput="state.recoveryCode=this.value;" />
       <input class="nameinput" type="password" placeholder="Nytt passord (minst 6 tegn)" value="${esc(state.recoveryNewPassword)}"
@@ -906,12 +985,13 @@ function renderLogg(){
 
 function renderInnstillinger(){
   const s = state.settings;
+  const me = state.adminUsers.find(u=>u.id===state.currentAdminId) || {};
   return `
     <h1>Innstillinger</h1>
-    <h3 style="font-size:16px; margin-bottom:10px;">Konto</h3>
-    <p style="color:var(--muted); font-size:13px; margin-bottom:14px;">Innlogget som ${esc(s.email)}. Nåværende passord kreves for å lagre endringer her.</p>
+    <h3 style="font-size:16px; margin-bottom:10px;">Din konto</h3>
+    <p style="color:var(--muted); font-size:13px; margin-bottom:14px;">Innlogget som ${esc(me.email||'')}. Nåværende passord kreves for å lagre endringer her.</p>
     <div class="formgrid">
-      <div class="formfield"><label>E-post</label><input type="email" value="${esc(state.acctEmail || s.email)}" oninput="state.acctEmail=this.value;" /></div>
+      <div class="formfield"><label>E-post</label><input type="email" value="${esc(state.acctEmail || me.email || '')}" oninput="state.acctEmail=this.value;" /></div>
       <div class="formfield"><label>Nåværende passord</label><input type="password" value="${esc(state.acctCurrentPassword)}" oninput="state.acctCurrentPassword=this.value;" /></div>
       <div class="formfield"><label>Nytt passord (valgfritt)</label><input type="password" value="${esc(state.acctNewPassword)}" oninput="state.acctNewPassword=this.value;" placeholder="La stå tomt for å beholde" /></div>
       <div class="formfield"><label>Bekreft nytt passord</label><input type="password" value="${esc(state.acctNewPasswordConfirm)}" oninput="state.acctNewPasswordConfirm=this.value;" /></div>
@@ -922,6 +1002,46 @@ function renderInnstillinger(){
     </label>
     ${state.acctMsg?`<p style="font-size:13px; color:${state.acctMsg==='Lagret.'?'var(--muted)':'var(--danger)'}; margin-top:8px;">${esc(state.acctMsg)}</p>`:''}
     <div class="savebar"><button class="secondarybtn" onclick="saveAccountSettings()">Lagre</button></div>
+
+    <h3 style="font-size:16px; margin:30px 0 10px;">Kontorsjefer</h3>
+    <p style="color:var(--muted); font-size:13px; margin-bottom:12px;">Alle som kan logge inn på denne siden. Legg til nye, eller fjern noen som har sluttet.</p>
+    <table style="max-width:560px; margin-bottom:16px;">
+      <thead><tr><th>E-post</th><th></th></tr></thead>
+      <tbody>
+        ${state.adminUsers.map(u=>{
+          if(state.confirmDeleteAdminId === u.id){
+            return `<tr><td colspan="2">
+              <div class="confirmrow">
+                Fjerne «${esc(u.email)}» som kontorsjef?
+                <button class="smallbtn" onclick="deleteAdmin('${u.id}')">Ja, fjern</button>
+                <button class="smallbtn" onclick="state.confirmDeleteAdminId=null; render();">Avbryt</button>
+              </div>
+            </td></tr>`;
+          }
+          return `<tr>
+            <td>${esc(u.email)}${u.id===state.currentAdminId?' <span style="color:var(--muted); font-size:12px;">(deg)</span>':''}</td>
+            <td><button class="smallbtn" onclick="state.confirmDeleteAdminId='${u.id}'; render();">Slett</button></td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+
+    ${state.newAdminRecoveryCode ? `
+      <div class="noteband" style="border-color:var(--accent);">
+        <strong>Gjenopprettingskode for ${esc(state.newAdminRecoveryEmail)}:</strong>
+        <div class="num" style="font-size:20px; letter-spacing:2px; margin:8px 0;">${esc(state.newAdminRecoveryCode)}</div>
+        Gi denne koden videre til vedkommende sammen med passordet du valgte - den lar dem sette nytt passord hvis de glemmer det. Vises kun denne ene gangen.
+        <div style="margin-top:8px;"><button class="smallbtn" onclick="dismissNewAdminCode()">Jeg har notert koden</button></div>
+      </div>
+    ` : `
+      <div class="formgrid">
+        <div class="formfield"><label>Ny kontorsjef - e-post</label><input type="email" value="${esc(state.newAdminEmail)}" oninput="state.newAdminEmail=this.value;" /></div>
+        <div class="formfield"><label>Passord (minst 6 tegn)</label><input type="password" value="${esc(state.newAdminPassword)}" oninput="state.newAdminPassword=this.value;" /></div>
+        <div class="formfield"><label>Bekreft passord</label><input type="password" value="${esc(state.newAdminPasswordConfirm)}" oninput="state.newAdminPasswordConfirm=this.value;" /></div>
+      </div>
+      ${state.newAdminMsg?`<p style="font-size:13px; color:var(--danger); margin-top:8px;">${esc(state.newAdminMsg)}</p>`:''}
+      <div class="savebar"><button class="secondarybtn" onclick="addAdmin()">Legg til kontorsjef</button></div>
+    `}
 
     <h3 style="font-size:16px; margin:30px 0 10px;">Ansatt-appens lenke</h3>
     <p style="color:var(--muted); font-size:13px; margin-bottom:10px;">Brukes til å generere QR-kodene under «QR-koder». Fylles inn når appen er laget - la stå tom inntil videre.</p>
@@ -988,7 +1108,7 @@ function render(){
   }
 
   let body;
-  if(!state.settings) body = renderAdminSetup();
+  if(state.adminUsers.length === 0) body = renderAdminSetup();
   else if(state.justRecoveryCode) body = renderRecoveryCodeDisplay();
   else if(!state.adminUnlocked) body = state.showRecovery ? renderRecoveryForm() : renderAdminLogin();
   else body = renderDashboard();
