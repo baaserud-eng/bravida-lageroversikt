@@ -264,6 +264,9 @@ function randomCode(len){
   return out;
 }
 function normEmail(e){ return String(e||'').trim().toLowerCase(); }
+function isRegisteredAdmin(email){
+  return state.adminUsers.some(u => normEmail(u.email) === normEmail(email));
+}
 
 function uid(){
   return (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : 'id-'+Date.now()+'-'+Math.random().toString(36).slice(2,9);
@@ -324,6 +327,20 @@ async function init(){
       if(freshSettings) state.settings = freshSettings;
       const freshAdminUsers = await storageGet('adminUsers', true);
       if(freshAdminUsers) state.adminUsers = freshAdminUsers;
+
+      // Sikkerhetssjekk: en Firebase-konto som er logget inn er IKKE det samme som
+      // en registrert kontorsjef - hvem som helst kan i teorien opprette en konto
+      // direkte mot Firebase (utenom denne siden). Hvis kontoen ikke står i
+      // kontorsjef-lista, nekter vi tilgang til dashbordet og logger den ut igjen.
+      // (Unntak: helt i starten, før noen kontorsjef er opprettet ennå.)
+      if(state.adminUsers.length > 0 && !isRegisteredAdmin(user.email)){
+        await auth.signOut();
+        state.adminUnlocked = false;
+        state.currentUserEmail = null;
+        state.loginError = 'Denne kontoen er ikke registrert som kontorsjef på denne siden.';
+        render();
+        return;
+      }
     }
     render();
   });
@@ -504,6 +521,9 @@ async function saveAccountSettings(){
 }
 
 async function addAdmin(){
+  if(!auth.currentUser || (state.adminUsers.length > 0 && !isRegisteredAdmin(auth.currentUser.email))){
+    state.newAdminMsg = 'Du må være innlogget som registrert kontorsjef for å gjøre dette.'; render(); return;
+  }
   const email = normEmail(state.newAdminEmail);
   if(!email.includes('@') || email.length < 5){ state.newAdminMsg = 'Skriv inn en gyldig e-post.'; render(); return; }
   if(state.adminUsers.some(u=>u.email===email)){ state.newAdminMsg = 'Denne e-posten er allerede en kontorsjef.'; render(); return; }
@@ -529,6 +549,12 @@ async function addAdmin(){
 }
 
 function deleteAdmin(email){
+  if(!auth.currentUser || !isRegisteredAdmin(auth.currentUser.email)){
+    state.newAdminMsg = 'Du må være innlogget som registrert kontorsjef for å gjøre dette.';
+    state.confirmDeleteAdminId = null;
+    render();
+    return;
+  }
   if(state.adminUsers.length <= 1){
     state.newAdminMsg = 'Du kan ikke fjerne den siste kontorsjefen fra lista.';
     state.confirmDeleteAdminId = null;
@@ -542,6 +568,9 @@ function deleteAdmin(email){
 }
 
 async function saveAppUrl(){
+  if(!auth.currentUser || !isRegisteredAdmin(auth.currentUser.email)){
+    state.appUrlMsg = 'Du må være innlogget som registrert kontorsjef for å gjøre dette.'; render(); return;
+  }
   state.settings.appUrl = state.appUrlDraft.trim();
   await storageSet('settings', state.settings, true);
   state.appUrlMsg = 'Lagret.';
@@ -609,7 +638,12 @@ function fmtKr(n){
   return num.toLocaleString('nb-NO', {minimumFractionDigits:0, maximumFractionDigits:2}) + ' kr';
 }
 function jsStr(s){
-  return "'" + String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\n/g,'\\n') + "'";
+  // Brukes til å legge verdier inn i inline onclick-attributter. Må være trygg
+  // BÅDE som JS-strengliteral OG som HTML-attributt - derfor kjøres esc() på
+  // toppen, ellers kan f.eks. et anførselstegn i en AO-nummer- eller e-postverdi
+  // bryte ut av attributten og kjøre vilkårlig HTML/JS (XSS).
+  const jsLiteral = "'" + String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\n/g,'\\n') + "'";
+  return esc(jsLiteral);
 }
 function shelfUrl(itemId){
   const base = (state.settings && state.settings.appUrl) ? state.settings.appUrl.trim() : '';
