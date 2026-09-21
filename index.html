@@ -595,7 +595,13 @@ async function resetDemoData(){
 /* ============ helpers ============ */
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function fmtDate(iso){
-  try{ return new Date(iso).toLocaleString('nb-NO', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); }catch(e){ return iso; }
+  try{
+    const d = new Date(iso);
+    const pad = n => String(n).padStart(2,'0');
+    const datePart = `${pad(d.getDate())}.${pad(d.getMonth()+1)}.${d.getFullYear()}`;
+    const timePart = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    return `${datePart}${'&nbsp;'.repeat(6)}${timePart}`;
+  }catch(e){ return iso; }
 }
 function isLow(item){ return item.qty <= item.minStock; }
 function fmtKr(n){
@@ -630,7 +636,7 @@ function exportOversiktToExcel(){
 }
 function exportLoggToExcel(){
   const rows = state.logs.map(l => ({
-    'Tidspunkt': fmtDate(l.ts),
+    'Tidspunkt': fmtDate(l.ts).replace(/&nbsp;/g, ' '),
     'Vare': l.itemName,
     'Antall': l.qty,
     'Ansatt': l.employee,
