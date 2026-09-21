@@ -267,6 +267,12 @@ function normEmail(e){ return String(e||'').trim().toLowerCase(); }
 function isRegisteredAdmin(email){
   return state.adminUsers.some(u => normEmail(u.email) === normEmail(email));
 }
+async function syncAdminEmails(){
+  // Holder den enkle e-postlista (adminEmails) i Firestore oppdatert i takt med
+  // den fulle kontorsjef-lista (adminUsers) - det er adminEmails de strenge
+  // reglene faktisk sjekker mot.
+  await storageSet('adminEmails', state.adminUsers.map(u=>normEmail(u.email)), true);
+}
 
 function uid(){
   return (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : 'id-'+Date.now()+'-'+Math.random().toString(36).slice(2,9);
@@ -304,6 +310,9 @@ async function init(){
         recoveryHash: settings.recoveryHash,
         createdAt: new Date().toISOString()
       }];
+      // adminEmails må skrives FØR adminUsers/settings, siden Firestore-reglene krever
+      // at man allerede står i adminEmails for å få lov til å skrive de to andre.
+      await storageSet('adminEmails', [normEmail(settings.email)], true);
       settings = { appUrl: settings.appUrl || '' };
       await storageSet('adminUsers', adminUsers, true);
       await storageSet('settings', settings, true);
@@ -312,6 +321,15 @@ async function init(){
     }
   }
   if(!settings) settings = { appUrl: '' };
+
+  // Sikkerhetsmigrering: adminEmails er en enkel liste med bare e-postadresser (ingen passord-info),
+  // som de strenge Firestore-reglene sjekker mot. Fylles automatisk ut fra kontorsjef-lista hvis den
+  // ikke finnes fra før - trygt å kjøre hver gang, gjør ingenting hvis den allerede finnes.
+  let adminEmails = await storageGet('adminEmails', true);
+  if(!adminEmails && adminUsers.length > 0){
+    adminEmails = adminUsers.map(u=>normEmail(u.email));
+    await storageSet('adminEmails', adminEmails, true);
+  }
 
   state.items = items; state.logs = logs; state.notifications = notifications;
   state.settings = settings; state.adminUsers = adminUsers; state.loaded = true;
@@ -393,6 +411,8 @@ async function submitSetup(){
     await auth.createUserWithEmailAndPassword(email, state.setupPassword);
     state.adminUsers = [{ email, createdAt: new Date().toISOString() }];
     if(!state.settings) state.settings = { appUrl: '' };
+    // adminEmails må skrives FØR adminUsers/settings pga. Firestore-reglene
+    await storageSet('adminEmails', [email], true);
     await storageSet('adminUsers', state.adminUsers, true);
     await storageSet('settings', state.settings, true);
     state.setupPassword=''; state.setupPasswordConfirm=''; state.setupError='';
@@ -506,6 +526,7 @@ async function saveAccountSettings(){
       const dirEntry = state.adminUsers.find(u=>u.email===oldEmail);
       if(dirEntry) dirEntry.email = newEmail;
       await storageSet('adminUsers', state.adminUsers, true);
+      await syncAdminEmails();
       state.currentUserEmail = newEmail;
     }
     if(state.acctNewPassword){
@@ -539,6 +560,7 @@ async function addAdmin(){
 
     state.adminUsers.push({ email, createdAt: new Date().toISOString() });
     await storageSet('adminUsers', state.adminUsers, true);
+    await syncAdminEmails();
 
     state.newAdminEmail=''; state.newAdminPassword=''; state.newAdminPasswordConfirm=''; state.newAdminMsg='';
     showToast('Kontorsjef lagt til.');
@@ -548,7 +570,7 @@ async function addAdmin(){
   }
 }
 
-function deleteAdmin(email){
+async function deleteAdmin(email){
   if(!auth.currentUser || !isRegisteredAdmin(auth.currentUser.email)){
     state.newAdminMsg = 'Du må være innlogget som registrert kontorsjef for å gjøre dette.';
     state.confirmDeleteAdminId = null;
@@ -563,7 +585,8 @@ function deleteAdmin(email){
   }
   state.adminUsers = state.adminUsers.filter(u=>u.email!==email);
   state.confirmDeleteAdminId = null;
-  storageSet('adminUsers', state.adminUsers, true);
+  await storageSet('adminUsers', state.adminUsers, true);
+  await syncAdminEmails();
   showToast('Fjernet fra lista.', 'danger');
 }
 
