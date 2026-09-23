@@ -624,7 +624,12 @@ async function saveEmployeeCode(){
   if(code && !/^[0-9]{5}$/.test(code)){
     state.employeeCodeMsg = 'Koden må være nøyaktig 5 siffer.'; render(); return;
   }
-  await storageSet('employeeCode', code, true);
+  const ok = await storageSet('employeeCode', code, true);
+  if(!ok){
+    state.employeeCodeMsg = 'Klarte ikke å lagre koden (skriving til databasen feilet). Sjekk Firestore-reglene og prøv igjen.';
+    render();
+    return;
+  }
   state.employeeCode = code;
   state.employeeCodeMsg = code ? 'Lagret. Ansatte som har appen fra før må skrive inn den nye koden neste gang.' : 'Koden er fjernet - ansatt-appen krever ikke lenger kode.';
   render();
