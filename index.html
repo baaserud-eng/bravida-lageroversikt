@@ -184,7 +184,19 @@ async function storageSet(key, value, shared){
 }
 
 /* ============ state ============ */
-const CATEGORIES = ['Elektro','Brannsikkerhet','Ventilasjon','Adgangskontroll','Innbruddsalarm','Kameraovervåkning','Nødlys','Annet'];
+const CATEGORIES = ['Elektro','Brannsikkerhet','Ventilasjon','Adgangskontroll','Innbruddsalarm','Kameraovervåkning','Nødlys'];
+
+function categoryFieldHtml(pathExpr, current){
+  const isCustom = !CATEGORIES.includes(current);
+  if(isCustom){
+    return `<input type="text" value="${esc(current)}" placeholder="Skriv inn kategori" oninput="${pathExpr}=this.value;" />
+      <button type="button" onclick="${pathExpr}='${CATEGORIES[0]}'; render();" style="margin-top:4px; font-size:12px; background:none; border:none; color:var(--muted); text-decoration:underline; cursor:pointer; padding:0;">Velg fra liste</button>`;
+  }
+  return `<select onchange="if(this.value==='__custom__'){${pathExpr}=''; render();} else {${pathExpr}=this.value;}">
+      ${CATEGORIES.map(c=>`<option value="${c}" ${current===c?'selected':''}>${c}</option>`).join('')}
+      <option value="__custom__">Skriv inn selv...</option>
+    </select>`;
+}
 const UNITS = ['stk','meter','pakke','liter'];
 
 let state = {
@@ -607,7 +619,7 @@ function addItem(){
   const n = state.newItem;
   if(!n.name.trim()){ state.newItemError = 'Du må skrive et varenavn.'; render(); return; }
   state.newItemError = '';
-  state.items.push({id:uid(), name:n.name.trim(), produktnummer:(n.produktnummer||'').trim(), category:n.category, qty:Math.max(0,Number(n.qty)||0), unit:n.unit, minStock:Math.max(0,Number(n.minStock)||0), pris:Math.max(0,Number(n.pris)||0)});
+  state.items.push({id:uid(), name:n.name.trim(), produktnummer:(n.produktnummer||'').trim(), category:(n.category||'').trim() || CATEGORIES[0], qty:Math.max(0,Number(n.qty)||0), unit:n.unit, minStock:Math.max(0,Number(n.minStock)||0), pris:Math.max(0,Number(n.pris)||0)});
   state.newItem = {name:'', produktnummer:'', category:CATEGORIES[0], qty:0, unit:'stk', minStock:0, pris:0};
   checkLowStockNotifications();
   saveItems();
@@ -618,7 +630,7 @@ function cancelEdit(){ state.editingId = null; render(); }
 function saveEdit(){
   const idx = state.items.findIndex(i=>i.id===state.editingId);
   if(idx>-1){
-    state.items[idx] = {...state.editDraft, qty:Math.max(0,Number(state.editDraft.qty)||0), minStock:Math.max(0,Number(state.editDraft.minStock)||0), pris:Math.max(0,Number(state.editDraft.pris)||0)};
+    state.items[idx] = {...state.editDraft, category:(state.editDraft.category||'').trim() || CATEGORIES[0], qty:Math.max(0,Number(state.editDraft.qty)||0), minStock:Math.max(0,Number(state.editDraft.minStock)||0), pris:Math.max(0,Number(state.editDraft.pris)||0)};
   }
   state.editingId = null;
   checkLowStockNotifications();
@@ -869,9 +881,7 @@ function renderOversikt(){
             <div class="formfield"><label>Navn</label><input type="text" value="${esc(d.name)}" oninput="state.editDraft.name=this.value;" /></div>
             <div class="formfield"><label>Produktnummer</label><input type="text" value="${esc(d.produktnummer||'')}" oninput="state.editDraft.produktnummer=this.value;" /></div>
             <div class="formfield"><label>Kategori</label>
-              <select onchange="state.editDraft.category=this.value;">
-                ${CATEGORIES.map(c=>`<option value="${c}" ${d.category===c?'selected':''}>${c}</option>`).join('')}
-              </select>
+              ${categoryFieldHtml('state.editDraft.category', d.category)}
             </div>
             <div class="formfield"><label>Antall</label><input type="number" value="${d.qty}" oninput="state.editDraft.qty=this.value;" /></div>
             <div class="formfield"><label>Enhet</label>
@@ -947,9 +957,7 @@ function renderNyVare(){
       <div class="formfield"><label>Navn</label><input type="text" value="${esc(n.name)}" oninput="state.newItem.name=this.value;" placeholder="F.eks. Brannalarm" /></div>
       <div class="formfield"><label>Produktnummer</label><input type="text" value="${esc(n.produktnummer)}" oninput="state.newItem.produktnummer=this.value;" placeholder="Valgfritt" /></div>
       <div class="formfield"><label>Kategori</label>
-        <select onchange="state.newItem.category=this.value;">
-          ${CATEGORIES.map(c=>`<option value="${c}" ${n.category===c?'selected':''}>${c}</option>`).join('')}
-        </select>
+        ${categoryFieldHtml('state.newItem.category', n.category)}
       </div>
       <div class="formfield"><label>Antall på lager nå</label><input type="number" value="${n.qty}" oninput="state.newItem.qty=this.value;" /></div>
       <div class="formfield"><label>Enhet</label>
