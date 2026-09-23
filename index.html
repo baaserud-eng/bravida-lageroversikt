@@ -189,7 +189,7 @@ const CATEGORIES = ['Elektro','Brannsikkerhet','Ventilasjon','Adgangskontroll','
 function categoryFieldHtml(pathExpr, current){
   const isCustom = !CATEGORIES.includes(current);
   if(isCustom){
-    return `<input type="text" value="${esc(current)}" placeholder="Skriv inn kategori" oninput="${pathExpr}=this.value;" />
+    return `<input type="text" value="${esc(current)}" placeholder="Skriv inn kategori" data-focus-id="categoryCustom" oninput="${pathExpr}=this.value;" />
       <button type="button" onclick="${pathExpr}='${CATEGORIES[0]}'; render();" style="margin-top:4px; font-size:12px; background:none; border:none; color:var(--muted); text-decoration:underline; cursor:pointer; padding:0;">Velg fra liste</button>`;
   }
   return `<select onchange="if(this.value==='__custom__'){${pathExpr}=''; render();} else {${pathExpr}=this.value;}">
@@ -901,19 +901,19 @@ function renderOversikt(){
       return `<tr><td colspan="8">
         <div class="inlineedit">
           <div class="formgrid">
-            <div class="formfield"><label>Navn</label><input type="text" value="${esc(d.name)}" oninput="state.editDraft.name=this.value;" /></div>
-            <div class="formfield"><label>Produktnummer</label><input type="text" value="${esc(d.produktnummer||'')}" oninput="state.editDraft.produktnummer=this.value;" /></div>
+            <div class="formfield"><label>Navn</label><input type="text" value="${esc(d.name)}" data-focus-id="editName" oninput="state.editDraft.name=this.value;" /></div>
+            <div class="formfield"><label>Produktnummer</label><input type="text" value="${esc(d.produktnummer||'')}" data-focus-id="editProduktnummer" oninput="state.editDraft.produktnummer=this.value;" /></div>
             <div class="formfield"><label>Kategori</label>
               ${categoryFieldHtml('state.editDraft.category', d.category)}
             </div>
-            <div class="formfield"><label>Antall</label><input type="number" value="${d.qty}" oninput="state.editDraft.qty=this.value;" /></div>
+            <div class="formfield"><label>Antall</label><input type="number" value="${d.qty}" data-focus-id="editQty" oninput="state.editDraft.qty=this.value;" /></div>
             <div class="formfield"><label>Enhet</label>
               <select onchange="state.editDraft.unit=this.value;">
                 ${UNITS.map(u=>`<option value="${u}" ${d.unit===u?'selected':''}>${u}</option>`).join('')}
               </select>
             </div>
-            <div class="formfield"><label>Pris per enhet (kr)</label><input type="number" step="0.01" value="${d.pris||0}" oninput="state.editDraft.pris=this.value;" /></div>
-            <div class="formfield"><label>Min. beholdning (varsel)</label><input type="number" value="${d.minStock}" oninput="state.editDraft.minStock=this.value;" /></div>
+            <div class="formfield"><label>Pris per enhet (kr)</label><input type="number" step="0.01" value="${d.pris||0}" data-focus-id="editPris" oninput="state.editDraft.pris=this.value;" /></div>
+            <div class="formfield"><label>Min. beholdning (varsel)</label><input type="number" value="${d.minStock}" data-focus-id="editMinStock" oninput="state.editDraft.minStock=this.value;" /></div>
           </div>
           <div class="savebar rowbtns">
             <button class="smallbtn" onclick="saveEdit()">Lagre</button>
@@ -977,19 +977,19 @@ function renderNyVare(){
     <h1>Legg til vare</h1>
     ${state.newItemError?`<div class="errmsg">${esc(state.newItemError)}</div>`:''}
     <div class="formgrid">
-      <div class="formfield"><label>Navn</label><input type="text" value="${esc(n.name)}" oninput="state.newItem.name=this.value;" placeholder="F.eks. Brannalarm" /></div>
-      <div class="formfield"><label>Produktnummer</label><input type="text" value="${esc(n.produktnummer)}" oninput="state.newItem.produktnummer=this.value;" placeholder="Valgfritt" /></div>
+      <div class="formfield"><label>Navn</label><input type="text" value="${esc(n.name)}" data-focus-id="newItemName" oninput="state.newItem.name=this.value;" placeholder="F.eks. Brannalarm" /></div>
+      <div class="formfield"><label>Produktnummer</label><input type="text" value="${esc(n.produktnummer)}" data-focus-id="newItemProduktnummer" oninput="state.newItem.produktnummer=this.value;" placeholder="Valgfritt" /></div>
       <div class="formfield"><label>Kategori</label>
         ${categoryFieldHtml('state.newItem.category', n.category)}
       </div>
-      <div class="formfield"><label>Antall på lager nå</label><input type="number" value="${n.qty}" oninput="state.newItem.qty=this.value;" /></div>
+      <div class="formfield"><label>Antall på lager nå</label><input type="number" value="${n.qty}" data-focus-id="newItemQty" oninput="state.newItem.qty=this.value;" /></div>
       <div class="formfield"><label>Enhet</label>
         <select onchange="state.newItem.unit=this.value;">
           ${UNITS.map(u=>`<option value="${u}" ${n.unit===u?'selected':''}>${u}</option>`).join('')}
         </select>
       </div>
-      <div class="formfield"><label>Varsle ved (min. beholdning)</label><input type="number" value="${n.minStock}" oninput="state.newItem.minStock=this.value;" /></div>
-      <div class="formfield"><label>Pris per enhet (kr)</label><input type="number" step="0.01" value="${n.pris}" oninput="state.newItem.pris=this.value;" placeholder="0" /></div>
+      <div class="formfield"><label>Varsle ved (min. beholdning)</label><input type="number" value="${n.minStock}" data-focus-id="newItemMinStock" oninput="state.newItem.minStock=this.value;" /></div>
+      <div class="formfield"><label>Pris per enhet (kr)</label><input type="number" step="0.01" value="${n.pris}" data-focus-id="newItemPris" oninput="state.newItem.pris=this.value;" placeholder="0" /></div>
     </div>
     <div class="savebar"><button class="primarybtn" style="width:auto; padding:12px 22px;" onclick="addItem()">Legg til vare</button></div>
   `;
@@ -1122,10 +1122,10 @@ function renderInnstillinger(){
     <h3 style="font-size:16px; margin-bottom:10px;">Din konto</h3>
     <p style="color:var(--muted); font-size:13px; margin-bottom:14px;">Innlogget som ${esc(me.email||'')}. Nåværende passord kreves for å lagre endringer her.</p>
     <div class="formgrid">
-      <div class="formfield"><label>E-post</label><input type="email" value="${esc(state.acctEmail || me.email || '')}" oninput="state.acctEmail=this.value;" /></div>
-      <div class="formfield"><label>Nåværende passord</label><input type="password" value="${esc(state.acctCurrentPassword)}" oninput="state.acctCurrentPassword=this.value;" /></div>
-      <div class="formfield"><label>Nytt passord (valgfritt)</label><input type="password" value="${esc(state.acctNewPassword)}" oninput="state.acctNewPassword=this.value;" placeholder="La stå tomt for å beholde" /></div>
-      <div class="formfield"><label>Bekreft nytt passord</label><input type="password" value="${esc(state.acctNewPasswordConfirm)}" oninput="state.acctNewPasswordConfirm=this.value;" /></div>
+      <div class="formfield"><label>E-post</label><input type="email" value="${esc(state.acctEmail || me.email || '')}" data-focus-id="acctEmail" oninput="state.acctEmail=this.value;" /></div>
+      <div class="formfield"><label>Nåværende passord</label><input type="password" value="${esc(state.acctCurrentPassword)}" data-focus-id="acctCurrentPassword" oninput="state.acctCurrentPassword=this.value;" /></div>
+      <div class="formfield"><label>Nytt passord (valgfritt)</label><input type="password" value="${esc(state.acctNewPassword)}" data-focus-id="acctNewPassword" oninput="state.acctNewPassword=this.value;" placeholder="La stå tomt for å beholde" /></div>
+      <div class="formfield"><label>Bekreft nytt passord</label><input type="password" value="${esc(state.acctNewPasswordConfirm)}" data-focus-id="acctNewPasswordConfirm" oninput="state.acctNewPasswordConfirm=this.value;" /></div>
     </div>
     ${state.acctMsg?`<p style="font-size:13px; color:${state.acctMsg==='Lagret.'?'var(--muted)':'var(--danger)'}; margin-top:8px;">${esc(state.acctMsg)}</p>`:''}
     <div class="savebar" style="display:flex; gap:10px; align-items:center;">
@@ -1158,9 +1158,9 @@ function renderInnstillinger(){
     <p style="color:var(--muted); font-size:12px; margin-bottom:16px;">«Slett» fjerner personen fra denne lista. For å faktisk sperre innloggingen deres helt, må du også slette brukeren under <a href="https://console.firebase.google.com/project/${esc(firebaseConfig.projectId)}/authentication/users" target="_blank" rel="noopener" style="color:var(--ink);">Firebase Console → Authentication</a>.</p>
 
     <div class="formgrid">
-      <div class="formfield"><label>Ny kontorsjef - e-post</label><input type="email" value="${esc(state.newAdminEmail)}" oninput="state.newAdminEmail=this.value;" /></div>
-      <div class="formfield"><label>Passord (minst 6 tegn)</label><input type="password" value="${esc(state.newAdminPassword)}" oninput="state.newAdminPassword=this.value;" /></div>
-      <div class="formfield"><label>Bekreft passord</label><input type="password" value="${esc(state.newAdminPasswordConfirm)}" oninput="state.newAdminPasswordConfirm=this.value;" /></div>
+      <div class="formfield"><label>Ny kontorsjef - e-post</label><input type="email" value="${esc(state.newAdminEmail)}" data-focus-id="newAdminEmail" oninput="state.newAdminEmail=this.value;" /></div>
+      <div class="formfield"><label>Passord (minst 6 tegn)</label><input type="password" value="${esc(state.newAdminPassword)}" data-focus-id="newAdminPassword" oninput="state.newAdminPassword=this.value;" /></div>
+      <div class="formfield"><label>Bekreft passord</label><input type="password" value="${esc(state.newAdminPasswordConfirm)}" data-focus-id="newAdminPasswordConfirm" oninput="state.newAdminPasswordConfirm=this.value;" /></div>
     </div>
     ${state.newAdminMsg?`<p style="font-size:13px; color:var(--danger); margin-top:8px;">${esc(state.newAdminMsg)}</p>`:''}
     <div class="savebar"><button class="secondarybtn" onclick="addAdmin()">Legg til kontorsjef</button></div>
@@ -1169,7 +1169,7 @@ function renderInnstillinger(){
     <p style="color:var(--muted); font-size:13px; margin-bottom:10px;">Brukes til å generere QR-kodene under «QR-koder». Fylles inn når appen er laget - la stå tom inntil videre.</p>
     <input type="text" placeholder="https://... (kommer senere)" value="${esc(state.appUrlDraft || s.appUrl || '')}"
       style="width:100%; max-width:420px; padding:10px 12px; border:1.5px solid var(--line); border-radius:3px; font-size:14px;"
-      oninput="state.appUrlDraft=this.value;" />
+      data-focus-id="appUrlDraft" oninput="state.appUrlDraft=this.value;" />
     ${state.appUrlMsg?`<p style="font-size:13px; color:var(--muted); margin-top:6px;">${esc(state.appUrlMsg)}</p>`:''}
     <div class="savebar"><button class="secondarybtn" onclick="saveAppUrl()">Lagre lenke</button></div>
 
@@ -1177,7 +1177,7 @@ function renderInnstillinger(){
     <p style="color:var(--muted); font-size:13px; margin-bottom:10px;">Ansatte må skrive inn denne 5-sifrede koden første gang de åpner uttaks-appen (den huskes på telefonen deres etterpå). Del koden muntlig eller på annen måte enn selve lenken/QR-koden. La feltet stå tomt for å ikke kreve noen kode.</p>
     <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="5" placeholder="F.eks. 48213" value="${esc(state.employeeCodeDraft)}"
       style="width:100%; max-width:160px; padding:10px 12px; border:1.5px solid var(--line); border-radius:3px; font-size:14px; letter-spacing:0.15em;"
-      oninput="state.employeeCodeDraft=this.value.replace(/[^0-9]/g,'').slice(0,5);" />
+      data-focus-id="employeeCodeDraft" oninput="state.employeeCodeDraft=this.value.replace(/[^0-9]/g,'').slice(0,5);" />
     ${state.employeeCodeMsg?`<p style="font-size:13px; color:var(--muted); margin-top:6px;">${esc(state.employeeCodeMsg)}</p>`:''}
     <div class="savebar"><button class="secondarybtn" onclick="saveEmployeeCode()">Lagre kode</button></div>
 
