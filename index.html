@@ -225,6 +225,7 @@ let state = {
   newAdminEmail:'', newAdminPassword:'', newAdminPasswordConfirm:'', newAdminMsg:'',
   confirmDeleteAdminId:null,
   appUrlDraft:'', appUrlMsg:'',
+  employeeCode:'', employeeCodeDraft:'', employeeCodeMsg:'',
   toastMsg:null, toastType:'success'
 };
 let toastTimer = null;
@@ -307,6 +308,7 @@ async function init(){
   if(!logs){ logs = []; await storageSet('logs', logs, true); }
   let notifications = await storageGet('notifications', true);
   if(!notifications){ notifications = []; }
+  let employeeCode = await storageGet('employeeCode', true);
 
   let settings = await storageGet('settings', true);
   let adminUsers = await storageGet('adminUsers', true);
@@ -345,6 +347,8 @@ async function init(){
 
   state.items = items; state.logs = logs; state.notifications = notifications;
   state.settings = settings; state.adminUsers = adminUsers; state.loaded = true;
+  state.employeeCode = employeeCode || '';
+  state.employeeCodeDraft = employeeCode || '';
   checkLowStockNotifications(true); // baseline stille - ikke varsle om ting som allerede var lavt før noen åpnet siden
 
   auth.onAuthStateChanged(async user=>{
@@ -609,6 +613,20 @@ async function saveAppUrl(){
   state.settings.appUrl = state.appUrlDraft.trim();
   await storageSet('settings', state.settings, true);
   state.appUrlMsg = 'Lagret.';
+  render();
+}
+
+async function saveEmployeeCode(){
+  if(!auth.currentUser || !isRegisteredAdmin(auth.currentUser.email)){
+    state.employeeCodeMsg = 'Du må være innlogget som registrert kontorsjef for å gjøre dette.'; render(); return;
+  }
+  const code = (state.employeeCodeDraft||'').trim();
+  if(code && !/^[0-9]{5}$/.test(code)){
+    state.employeeCodeMsg = 'Koden må være nøyaktig 5 siffer.'; render(); return;
+  }
+  await storageSet('employeeCode', code, true);
+  state.employeeCode = code;
+  state.employeeCodeMsg = code ? 'Lagret. Ansatte som har appen fra før må skrive inn den nye koden neste gang.' : 'Koden er fjernet - ansatt-appen krever ikke lenger kode.';
   render();
 }
 
@@ -1053,18 +1071,20 @@ function renderLogg(){
   const byAo = {};
   state.logs.forEach(l=>{
     const key = (l.aoNummer && l.aoNummer.trim()) ? l.aoNummer.trim() : 'Ikke oppgitt';
-    if(!byAo[key]) byAo[key] = { totalQty:0, count:0, last:l.ts, totalCost:0 };
+    if(!byAo[key]) byAo[key] = { totalQty:0, count:0, last:l.ts, totalCost:0, employees:new Set() };
     byAo[key].totalQty += l.qty;
     byAo[key].count += 1;
     byAo[key].totalCost += (Number(l.pris)||0) * (Number(l.qty)||0);
     if(l.ts > byAo[key].last) byAo[key].last = l.ts;
+    const empName = (l.employee || '').trim();
+    if(empName) byAo[key].employees.add(empName);
   });
   const aoSummaryRows = Object.entries(byAo)
     .filter(([ao]) => !q || ao.toLowerCase().includes(q))
     .sort((a,b)=> b[1].totalQty - a[1].totalQty)
     .map(([ao, s])=>`
       <tr style="cursor:pointer;" onclick="state.selectedAo=${jsStr(ao)}; render();">
-        <td>${esc(ao)}</td><td class="num">${s.totalQty}</td><td class="num">${s.count}</td><td class="num">${fmtKr(s.totalCost)}</td><td>${fmtDate(s.last)}</td>
+        <td>${esc(ao)}</td><td class="num">${s.totalQty}</td><td class="num">${s.count}</td><td class="num">${fmtKr(s.totalCost)}</td><td>${esc(s.employees.size ? [...s.employees].join(', ') : '–')}</td><td>${fmtDate(s.last)}</td>
       </tr>
     `).join('');
 
@@ -1083,8 +1103,8 @@ function renderLogg(){
     <h3 style="font-size:16px; margin-bottom:10px;">Oversikt per AO-nummer</h3>
     <p style="color:var(--muted); font-size:12.5px; margin:-4px 0 12px;">Trykk på en rad for å se og skrive ut kvittering for den jobben.</p>
     <table>
-      <thead><tr><th>AO-nummer</th><th>Antall tatt ut totalt</th><th>Antall uttak</th><th>Totalt kostnad</th><th>Siste uttak</th></tr></thead>
-      <tbody>${aoSummaryRows || `<tr><td colspan="5" style="color:var(--muted); padding:20px;">${state.logs.length ? 'Ingen AO-numre matcher søket.' : 'Ingen uttak logget ennå.'}</td></tr>`}</tbody>
+      <thead><tr><th>AO-nummer</th><th>Antall tatt ut totalt</th><th>Antall uttak</th><th>Totalt kostnad</th><th>Ansatte</th><th>Siste uttak</th></tr></thead>
+      <tbody>${aoSummaryRows || `<tr><td colspan="6" style="color:var(--muted); padding:20px;">${state.logs.length ? 'Ingen AO-numre matcher søket.' : 'Ingen uttak logget ennå.'}</td></tr>`}</tbody>
     </table>
   `;
 }
@@ -1147,6 +1167,14 @@ function renderInnstillinger(){
       oninput="state.appUrlDraft=this.value;" />
     ${state.appUrlMsg?`<p style="font-size:13px; color:var(--muted); margin-top:6px;">${esc(state.appUrlMsg)}</p>`:''}
     <div class="savebar"><button class="secondarybtn" onclick="saveAppUrl()">Lagre lenke</button></div>
+
+    <h3 style="font-size:16px; margin:30px 0 10px;">Kode for ansatt-appen</h3>
+    <p style="color:var(--muted); font-size:13px; margin-bottom:10px;">Ansatte må skrive inn denne 5-sifrede koden første gang de åpner uttaks-appen (den huskes på telefonen deres etterpå). Del koden muntlig eller på annen måte enn selve lenken/QR-koden. La feltet stå tomt for å ikke kreve noen kode.</p>
+    <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="5" placeholder="F.eks. 48213" value="${esc(state.employeeCodeDraft)}"
+      style="width:100%; max-width:160px; padding:10px 12px; border:1.5px solid var(--line); border-radius:3px; font-size:14px; letter-spacing:0.15em;"
+      oninput="state.employeeCodeDraft=this.value.replace(/[^0-9]/g,'').slice(0,5);" />
+    ${state.employeeCodeMsg?`<p style="font-size:13px; color:var(--muted); margin-top:6px;">${esc(state.employeeCodeMsg)}</p>`:''}
+    <div class="savebar"><button class="secondarybtn" onclick="saveEmployeeCode()">Lagre kode</button></div>
 
     <h3 style="font-size:16px; margin:30px 0 10px;">Demo-data</h3>
     ${state.confirmReset ? `
