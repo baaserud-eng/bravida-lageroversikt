@@ -821,7 +821,7 @@ function renderAdminSetup(){
       <h2>Sett opp kontorsjef-tilgang</h2>
       <p>Dette er første gang siden åpnes. Velg en e-post (brukes kun som innloggingsnavn her - det sendes ingen e-poster) og et passord.</p>
       ${state.setupError?`<div class="errmsg">${esc(state.setupError)}</div>`:''}
-      <input class="nameinput" type="email" placeholder="E-post" value="${esc(state.setupEmail)}"
+      <input class="nameinput" type="text" inputmode="email" placeholder="E-post" value="${esc(state.setupEmail)}"
         data-focus-id="setupEmail" oninput="state.setupEmail=this.value;" />
       <input class="nameinput" type="password" placeholder="Passord (minst 6 tegn)" value="${esc(state.setupPassword)}"
         data-focus-id="setupPassword" oninput="state.setupPassword=this.value;" />
@@ -841,7 +841,7 @@ function renderAdminLogin(){
       <h2>Bravida Lager</h2>
       <p>Logg inn for å se lageroversikten.</p>
       ${locked ? `<div class="errmsg">For mange feilforsøk. Prøv igjen om ${secsLeft} sekunder.</div>` : (state.loginError?`<div class="errmsg">${esc(state.loginError)}</div>`:'')}
-      <input class="nameinput" type="email" placeholder="E-post" value="${esc(state.loginEmail)}" ${locked?'disabled':''}
+      <input class="nameinput" type="text" inputmode="email" placeholder="E-post" value="${esc(state.loginEmail)}" ${locked?'disabled':''}
         data-focus-id="loginEmail" oninput="state.loginEmail=this.value;" />
       <input class="pininput" style="letter-spacing:normal; font-size:16px; text-align:left;" type="password" placeholder="Passord"
         value="${esc(state.loginPassword)}" ${locked?'disabled':''}
@@ -859,7 +859,7 @@ function renderRecoveryForm(){
       <p>Skriv inn e-posten din, så sender vi en lenke dit hvor du kan sette et nytt passord.</p>
       ${state.recoveryError?`<div class="errmsg">${esc(state.recoveryError)}</div>`:''}
       ${state.recoveryMsg?`<p style="color:var(--muted); font-size:13px; margin-bottom:14px;">${esc(state.recoveryMsg)}</p>`:''}
-      <input class="nameinput" type="email" placeholder="E-post" value="${esc(state.recoveryEmail)}"
+      <input class="nameinput" type="text" inputmode="email" placeholder="E-post" value="${esc(state.recoveryEmail)}"
         data-focus-id="recoveryEmail" oninput="state.recoveryEmail=this.value;" onkeydown="if(event.key==='Enter') submitRecovery();" />
       <button class="primarybtn" onclick="submitRecovery()">Send lenke</button>
       <p style="margin-top:14px;"><button class="ghostbtn" onclick="cancelForgotPassword()">Tilbake til innlogging</button></p>
@@ -1122,7 +1122,7 @@ function renderInnstillinger(){
     <h3 style="font-size:16px; margin-bottom:10px;">Din konto</h3>
     <p style="color:var(--muted); font-size:13px; margin-bottom:14px;">Innlogget som ${esc(me.email||'')}. Nåværende passord kreves for å lagre endringer her.</p>
     <div class="formgrid">
-      <div class="formfield"><label>E-post</label><input type="email" value="${esc(state.acctEmail || me.email || '')}" data-focus-id="acctEmail" oninput="state.acctEmail=this.value;" /></div>
+      <div class="formfield"><label>E-post</label><input type="text" inputmode="email" value="${esc(state.acctEmail || me.email || '')}" data-focus-id="acctEmail" oninput="state.acctEmail=this.value;" /></div>
       <div class="formfield"><label>Nåværende passord</label><input type="password" value="${esc(state.acctCurrentPassword)}" data-focus-id="acctCurrentPassword" oninput="state.acctCurrentPassword=this.value;" /></div>
       <div class="formfield"><label>Nytt passord (valgfritt)</label><input type="password" value="${esc(state.acctNewPassword)}" data-focus-id="acctNewPassword" oninput="state.acctNewPassword=this.value;" placeholder="La stå tomt for å beholde" /></div>
       <div class="formfield"><label>Bekreft nytt passord</label><input type="password" value="${esc(state.acctNewPasswordConfirm)}" data-focus-id="acctNewPasswordConfirm" oninput="state.acctNewPasswordConfirm=this.value;" /></div>
@@ -1158,7 +1158,7 @@ function renderInnstillinger(){
     <p style="color:var(--muted); font-size:12px; margin-bottom:16px;">«Slett» fjerner personen fra denne lista. For å faktisk sperre innloggingen deres helt, må du også slette brukeren under <a href="https://console.firebase.google.com/project/${esc(firebaseConfig.projectId)}/authentication/users" target="_blank" rel="noopener" style="color:var(--ink);">Firebase Console → Authentication</a>.</p>
 
     <div class="formgrid">
-      <div class="formfield"><label>Ny kontorsjef - e-post</label><input type="email" value="${esc(state.newAdminEmail)}" data-focus-id="newAdminEmail" oninput="state.newAdminEmail=this.value;" /></div>
+      <div class="formfield"><label>Ny kontorsjef - e-post</label><input type="text" inputmode="email" value="${esc(state.newAdminEmail)}" data-focus-id="newAdminEmail" oninput="state.newAdminEmail=this.value;" /></div>
       <div class="formfield"><label>Passord (minst 6 tegn)</label><input type="password" value="${esc(state.newAdminPassword)}" data-focus-id="newAdminPassword" oninput="state.newAdminPassword=this.value;" /></div>
       <div class="formfield"><label>Bekreft passord</label><input type="password" value="${esc(state.newAdminPasswordConfirm)}" data-focus-id="newAdminPasswordConfirm" oninput="state.newAdminPasswordConfirm=this.value;" /></div>
     </div>
@@ -1234,7 +1234,8 @@ function render(){
   const active = document.activeElement;
   let focusInfo = null;
   if(active && active.dataset && active.dataset.focusId && app.contains(active)){
-    focusInfo = { id: active.dataset.focusId, start: active.selectionStart, end: active.selectionEnd };
+    focusInfo = { id: active.dataset.focusId };
+    try{ focusInfo.start = active.selectionStart; focusInfo.end = active.selectionEnd; }catch(e){ /* denne input-typen (f.eks. number) støtter ikke tekstmarkering */ }
   }
 
   let body;
