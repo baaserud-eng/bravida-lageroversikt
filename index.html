@@ -93,10 +93,13 @@
   @keyframes toastIn{ from{opacity:0; transform:translate(-50%,-8px);} to{opacity:1; transform:translate(-50%,0);} }
   @media (prefers-reduced-motion: reduce){ .toast{animation:none;} }
 
-  .adminshell{display:flex; min-height:calc(100vh - 60px);}
+  .adminshell{
+    display:flex; min-height:calc(100vh - 60px);
+    background:linear-gradient(to right, var(--ink) 0, var(--ink) 180px, var(--paper) 180px, var(--paper) 100%);
+  }
   .adminnav{
     background:var(--ink); color:#fff; width:180px; flex-shrink:0; padding:20px 0;
-    position:sticky; top:var(--topbar-h, 54px);
+    position:sticky; top:var(--topbar-h, 54px); align-self:flex-start;
   }
   .adminnav button{
     display:block; width:100%; text-align:left; background:none; border:none; color:#C9CDD6;
@@ -109,8 +112,8 @@
   }
   .adminmain{flex:1; padding:26px; max-width:920px;}
   @media (max-width:720px){
-    .adminshell{flex-direction:column;}
-    .adminnav{width:100%; display:flex; overflow-x:auto; overflow-y:visible; padding:0; max-height:none; z-index:10;}
+    .adminshell{flex-direction:column; background:none;}
+    .adminnav{width:100%; display:flex; overflow-x:auto; overflow-y:visible; padding:0; max-height:none; z-index:10; align-self:stretch;}
     .adminnav button{white-space:nowrap; border-left:none; border-bottom:3px solid transparent; padding:14px 16px;}
     .adminnav button.active{border-left:none; border-bottom-color:var(--accent);}
   }
