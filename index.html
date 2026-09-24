@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Bravida Lager – Kontorsjef</title>
+<title>Bravida Lager – Administrator</title>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
@@ -288,7 +288,7 @@ function isRegisteredAdmin(email){
 }
 async function syncAdminEmails(){
   // Holder den enkle e-postlista (adminEmails) i Firestore oppdatert i takt med
-  // den fulle kontorsjef-lista (adminUsers) - det er adminEmails de strenge
+  // den fulle administrator-lista (adminUsers) - det er adminEmails de strenge
   // reglene faktisk sjekker mot.
   await storageSet('adminEmails', state.adminUsers.map(u=>normEmail(u.email)), true);
 }
@@ -321,7 +321,7 @@ async function init(){
 
   if(!adminUsers){
     if(settings && settings.passwordHash){
-      // migrer den gamle én-konto-modellen inn i den nye kontorsjef-lista, slik at eksisterende innlogging fortsetter å virke
+      // migrer den gamle én-konto-modellen inn i den nye administrator-lista, slik at eksisterende innlogging fortsetter å virke
       adminUsers = [{
         id: uid(),
         email: settings.email,
@@ -343,7 +343,7 @@ async function init(){
   if(!settings) settings = { appUrl: '' };
 
   // Sikkerhetsmigrering: adminEmails er en enkel liste med bare e-postadresser (ingen passord-info),
-  // som de strenge Firestore-reglene sjekker mot. Fylles automatisk ut fra kontorsjef-lista hvis den
+  // som de strenge Firestore-reglene sjekker mot. Fylles automatisk ut fra administrator-lista hvis den
   // ikke finnes fra før - trygt å kjøre hver gang, gjør ingenting hvis den allerede finnes.
   let adminEmails = await storageGet('adminEmails', true);
   if(!adminEmails && adminUsers.length > 0){
@@ -369,15 +369,15 @@ async function init(){
       if(freshAdminUsers) state.adminUsers = freshAdminUsers;
 
       // Sikkerhetssjekk: en Firebase-konto som er logget inn er IKKE det samme som
-      // en registrert kontorsjef - hvem som helst kan i teorien opprette en konto
+      // en registrert administrator - hvem som helst kan i teorien opprette en konto
       // direkte mot Firebase (utenom denne siden). Hvis kontoen ikke står i
-      // kontorsjef-lista, nekter vi tilgang til dashbordet og logger den ut igjen.
-      // (Unntak: helt i starten, før noen kontorsjef er opprettet ennå.)
+      // administrator-lista, nekter vi tilgang til dashbordet og logger den ut igjen.
+      // (Unntak: helt i starten, før noen administrator er opprettet ennå.)
       if(state.adminUsers.length > 0 && !isRegisteredAdmin(user.email)){
         await auth.signOut();
         state.adminUnlocked = false;
         state.currentUserEmail = null;
-        state.loginError = 'Denne kontoen er ikke registrert som kontorsjef på denne siden.';
+        state.loginError = 'Denne kontoen er ikke registrert som administrator på denne siden.';
         render();
         return;
       }
@@ -565,11 +565,11 @@ async function saveAccountSettings(){
 
 async function addAdmin(){
   if(!auth.currentUser || (state.adminUsers.length > 0 && !isRegisteredAdmin(auth.currentUser.email))){
-    state.newAdminMsg = 'Du må være innlogget som registrert kontorsjef for å gjøre dette.'; render(); return;
+    state.newAdminMsg = 'Du må være innlogget som registrert administrator for å gjøre dette.'; render(); return;
   }
   const email = normEmail(state.newAdminEmail);
   if(!email.includes('@') || email.length < 5){ state.newAdminMsg = 'Skriv inn en gyldig e-post.'; render(); return; }
-  if(state.adminUsers.some(u=>u.email===email)){ state.newAdminMsg = 'Denne e-posten er allerede en kontorsjef.'; render(); return; }
+  if(state.adminUsers.some(u=>u.email===email)){ state.newAdminMsg = 'Denne e-posten er allerede en administrator.'; render(); return; }
   if(state.newAdminPassword.length < 6){ state.newAdminMsg = 'Passordet må være minst 6 tegn.'; render(); return; }
   if(state.newAdminPassword !== state.newAdminPasswordConfirm){ state.newAdminMsg = 'Passordene er ikke like.'; render(); return; }
 
@@ -585,7 +585,7 @@ async function addAdmin(){
     await syncAdminEmails();
 
     state.newAdminEmail=''; state.newAdminPassword=''; state.newAdminPasswordConfirm=''; state.newAdminMsg='';
-    showToast('Kontorsjef lagt til.');
+    showToast('Administrator lagt til.');
   }catch(e){
     state.newAdminMsg = firebaseErrorMessage(e);
     render();
@@ -594,13 +594,13 @@ async function addAdmin(){
 
 async function deleteAdmin(email){
   if(!auth.currentUser || !isRegisteredAdmin(auth.currentUser.email)){
-    state.newAdminMsg = 'Du må være innlogget som registrert kontorsjef for å gjøre dette.';
+    state.newAdminMsg = 'Du må være innlogget som registrert administrator for å gjøre dette.';
     state.confirmDeleteAdminId = null;
     render();
     return;
   }
   if(state.adminUsers.length <= 1){
-    state.newAdminMsg = 'Du kan ikke fjerne den siste kontorsjefen fra lista.';
+    state.newAdminMsg = 'Du kan ikke fjerne den siste administratoren fra lista.';
     state.confirmDeleteAdminId = null;
     render();
     return;
@@ -614,7 +614,7 @@ async function deleteAdmin(email){
 
 async function saveAppUrl(){
   if(!auth.currentUser || !isRegisteredAdmin(auth.currentUser.email)){
-    state.appUrlMsg = 'Du må være innlogget som registrert kontorsjef for å gjøre dette.'; render(); return;
+    state.appUrlMsg = 'Du må være innlogget som registrert administrator for å gjøre dette.'; render(); return;
   }
   state.settings.appUrl = state.appUrlDraft.trim();
   await storageSet('settings', state.settings, true);
@@ -624,7 +624,7 @@ async function saveAppUrl(){
 
 async function saveEmployeeCode(){
   if(!auth.currentUser || !isRegisteredAdmin(auth.currentUser.email)){
-    state.employeeCodeMsg = 'Du må være innlogget som registrert kontorsjef for å gjøre dette.'; render(); return;
+    state.employeeCodeMsg = 'Du må være innlogget som registrert administrator for å gjøre dette.'; render(); return;
   }
   const code = (state.employeeCodeDraft||'').trim();
   if(code && !/^[0-9]{5}$/.test(code)){
@@ -839,7 +839,7 @@ function handleImportFile(event){
 function renderAdminSetup(){
   return `<div class="wrap">
     <div class="gatecard" style="max-width:380px;">
-      <h2>Sett opp kontorsjef-tilgang</h2>
+      <h2>Sett opp administrator-tilgang</h2>
       <p>Dette er første gang siden åpnes. Velg en e-post (brukes kun som innloggingsnavn her - det sendes ingen e-poster) og et passord.</p>
       ${state.setupError?`<div class="errmsg">${esc(state.setupError)}</div>`:''}
       <input class="nameinput" type="text" inputmode="email" placeholder="E-post" value="${esc(state.setupEmail)}"
@@ -1166,7 +1166,7 @@ function renderInnstillinger(){
       <button class="ghostbtn" onclick="signOutAdmin()">Logg ut</button>
     </div>
 
-    <h3 style="font-size:16px; margin:30px 0 10px;">Kontorsjefer</h3>
+    <h3 style="font-size:16px; margin:30px 0 10px;">Administratorer</h3>
     <p style="color:var(--muted); font-size:13px; margin-bottom:12px;">Alle som kan logge inn på denne siden. Legg til nye, eller fjern noen som har sluttet.</p>
     <table style="max-width:560px; margin-bottom:8px;">
       <thead><tr><th>E-post</th><th></th></tr></thead>
@@ -1191,12 +1191,12 @@ function renderInnstillinger(){
     <p style="color:var(--muted); font-size:12px; margin-bottom:16px;">«Slett» fjerner personen fra denne lista. For å faktisk sperre innloggingen deres helt, må du også slette brukeren under <a href="https://console.firebase.google.com/project/${esc(firebaseConfig.projectId)}/authentication/users" target="_blank" rel="noopener" style="color:var(--ink);">Firebase Console → Authentication</a>.</p>
 
     <div class="formgrid">
-      <div class="formfield"><label>Ny kontorsjef - e-post</label><input type="text" inputmode="email" value="${esc(state.newAdminEmail)}" data-focus-id="newAdminEmail" oninput="state.newAdminEmail=this.value;" /></div>
+      <div class="formfield"><label>Ny administrator - e-post</label><input type="text" inputmode="email" value="${esc(state.newAdminEmail)}" data-focus-id="newAdminEmail" oninput="state.newAdminEmail=this.value;" /></div>
       <div class="formfield"><label>Passord (minst 6 tegn)</label><input type="password" value="${esc(state.newAdminPassword)}" data-focus-id="newAdminPassword" oninput="state.newAdminPassword=this.value;" /></div>
       <div class="formfield"><label>Bekreft passord</label><input type="password" value="${esc(state.newAdminPasswordConfirm)}" data-focus-id="newAdminPasswordConfirm" oninput="state.newAdminPasswordConfirm=this.value;" /></div>
     </div>
     ${state.newAdminMsg?`<p style="font-size:13px; color:var(--danger); margin-top:8px;">${esc(state.newAdminMsg)}</p>`:''}
-    <div class="savebar"><button class="secondarybtn" onclick="addAdmin()">Legg til kontorsjef</button></div>
+    <div class="savebar"><button class="secondarybtn" onclick="addAdmin()">Legg til administrator</button></div>
 
     <h3 style="font-size:16px; margin:30px 0 10px;">Ansatt-appens lenke</h3>
     <p style="color:var(--muted); font-size:13px; margin-bottom:10px;">Brukes til å generere QR-kodene under «QR-koder». Fylles inn når appen er laget - la stå tom inntil videre.</p>
