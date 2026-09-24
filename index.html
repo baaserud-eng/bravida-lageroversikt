@@ -221,7 +221,7 @@ let state = {
   editingId:null,
   editDraft:{},
   confirmDeleteId:null,
-  confirmReset:false,
+  confirmReset:false, confirmClearLogs:false,
   logSearch:'',
   selectedAo:null,
   oversiktSearch:'',
@@ -672,6 +672,16 @@ function deleteItem(id){
   state.confirmDeleteId = null;
   saveItems();
   showToast('Vare slettet.', 'danger');
+}
+async function clearNotificationsAndLog(){
+  state.logs = [];
+  state.notifications = [];
+  lowStockState = {};
+  state.confirmClearLogs = false;
+  await storageSet('logs', state.logs, true);
+  await storageSet('notifications', state.notifications, true);
+  checkLowStockNotifications(true);
+  showToast('Varslinger og logg er tømt.');
 }
 async function resetDemoData(){
   state.items = seedItems();
@@ -1187,6 +1197,17 @@ function renderInnstillinger(){
       data-focus-id="employeeCodeDraft" oninput="state.employeeCodeDraft=this.value.replace(/[^0-9]/g,'').slice(0,5);" />
     ${state.employeeCodeMsg?`<p style="font-size:13px; color:var(--muted); margin-top:6px;">${esc(state.employeeCodeMsg)}</p>`:''}
     <div class="savebar"><button class="secondarybtn" onclick="saveEmployeeCode()">Lagre kode</button></div>
+
+    <h3 style="font-size:16px; margin:30px 0 10px;">Rydd før overlevering</h3>
+    <p style="font-size:13.5px; color:var(--muted); margin:0 0 10px;">Tømmer varslinger og uttakslogg (testdata), men rører ikke varelageret ditt.</p>
+    ${state.confirmClearLogs ? `
+      <div class="confirmrow">
+        Dette sletter alle varslinger og hele uttaksloggen permanent. Varene i lageret beholdes. Sikker?
+        <button class="smallbtn" onclick="clearNotificationsAndLog()">Ja, tøm</button>
+        <button class="smallbtn" onclick="state.confirmClearLogs=false; render();">Avbryt</button>
+      </div>` : `
+      <button class="dangerbtn" onclick="state.confirmClearLogs=true; render();">Tøm varslinger og logg</button>
+    `}
 
     <h3 style="font-size:16px; margin:30px 0 10px;">Demo-data</h3>
     ${state.confirmReset ? `
