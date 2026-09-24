@@ -221,7 +221,7 @@ let state = {
   editingId:null,
   editDraft:{},
   confirmDeleteId:null,
-  confirmReset:false, confirmClearLogs:false,
+  confirmReset:false, confirmClearNotifs:false, confirmClearLog:false,
   logSearch:'',
   selectedAo:null,
   oversiktSearch:'',
@@ -673,15 +673,19 @@ function deleteItem(id){
   saveItems();
   showToast('Vare slettet.', 'danger');
 }
-async function clearNotificationsAndLog(){
-  state.logs = [];
+async function clearNotifications(){
   state.notifications = [];
   lowStockState = {};
-  state.confirmClearLogs = false;
-  await storageSet('logs', state.logs, true);
+  state.confirmClearNotifs = false;
   await storageSet('notifications', state.notifications, true);
   checkLowStockNotifications(true);
-  showToast('Varslinger og logg er tømt.');
+  showToast('Varslinger er tømt.');
+}
+async function clearLog(){
+  state.logs = [];
+  state.confirmClearLog = false;
+  await storageSet('logs', state.logs, true);
+  showToast('Uttaksloggen er tømt.');
 }
 async function resetDemoData(){
   state.items = seedItems();
@@ -1128,6 +1132,18 @@ function renderLogg(){
       <thead><tr><th>AO-nummer</th><th>Antall tatt ut totalt</th><th>Antall uttak</th><th>Totalt kostnad</th><th>Ansatte</th><th>Siste uttak</th></tr></thead>
       <tbody>${aoSummaryRows || `<tr><td colspan="6" style="color:var(--muted); padding:20px;">${state.logs.length ? 'Ingen AO-numre matcher søket.' : 'Ingen uttak logget ennå.'}</td></tr>`}</tbody>
     </table>
+    ${state.logs.length ? `
+      <div style="margin-top:20px;">
+        ${state.confirmClearLog ? `
+          <div class="confirmrow">
+            Slette hele uttaksloggen permanent? Dette rører ikke varelageret.
+            <button class="smallbtn" onclick="clearLog()">Ja, tøm</button>
+            <button class="smallbtn" onclick="state.confirmClearLog=false; render();">Avbryt</button>
+          </div>` : `
+          <button class="dangerbtn" onclick="state.confirmClearLog=true; render();">Tøm logg</button>
+        `}
+      </div>
+    ` : ''}
   `;
 }
 
@@ -1198,17 +1214,6 @@ function renderInnstillinger(){
     ${state.employeeCodeMsg?`<p style="font-size:13px; color:var(--muted); margin-top:6px;">${esc(state.employeeCodeMsg)}</p>`:''}
     <div class="savebar"><button class="secondarybtn" onclick="saveEmployeeCode()">Lagre kode</button></div>
 
-    <h3 style="font-size:16px; margin:30px 0 10px;">Rydd før overlevering</h3>
-    <p style="font-size:13.5px; color:var(--muted); margin:0 0 10px;">Tømmer varslinger og uttakslogg (testdata), men rører ikke varelageret ditt.</p>
-    ${state.confirmClearLogs ? `
-      <div class="confirmrow">
-        Dette sletter alle varslinger og hele uttaksloggen permanent. Varene i lageret beholdes. Sikker?
-        <button class="smallbtn" onclick="clearNotificationsAndLog()">Ja, tøm</button>
-        <button class="smallbtn" onclick="state.confirmClearLogs=false; render();">Avbryt</button>
-      </div>` : `
-      <button class="dangerbtn" onclick="state.confirmClearLogs=true; render();">Tøm varslinger og logg</button>
-    `}
-
     <h3 style="font-size:16px; margin:30px 0 10px;">Demo-data</h3>
     ${state.confirmReset ? `
       <div class="confirmrow">
@@ -1233,6 +1238,18 @@ function renderVarslinger(){
     <h1>Varslinger</h1>
     <p style="color:var(--muted); font-size:13px; margin-bottom:16px;">Du får et varsel her hver gang en vare når eller går under grensen du har satt for lav beholdning.</p>
     <div class="notiflist">${rows || '<p style="color:var(--muted);">Ingen varslinger ennå.</p>'}</div>
+    ${state.notifications.length ? `
+      <div style="margin-top:20px;">
+        ${state.confirmClearNotifs ? `
+          <div class="confirmrow">
+            Slette alle varslinger permanent? Dette rører ikke varelageret.
+            <button class="smallbtn" onclick="clearNotifications()">Ja, tøm</button>
+            <button class="smallbtn" onclick="state.confirmClearNotifs=false; render();">Avbryt</button>
+          </div>` : `
+          <button class="dangerbtn" onclick="state.confirmClearNotifs=true; render();">Tøm varslinger</button>
+        `}
+      </div>
+    ` : ''}
   `;
 }
 
